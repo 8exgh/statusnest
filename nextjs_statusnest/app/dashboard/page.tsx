@@ -1,0 +1,92 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import DomainList from '@/components/DomainList';
+import AddDomainForm from '@/components/AddDomainForm';
+import { DomainMonitor } from '@/types';
+
+export default function Dashboard() {
+  const router = useRouter();
+  const [domains, setDomains] = useState<DomainMonitor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const fetchDomains = async () => {
+    try {
+      const response = await fetch('/api/domains/status');
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push('/login');
+          return;
+        }
+        throw new Error('Failed to fetch domains');
+      }
+
+      const data = await response.json();
+      setDomains(data.domains);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDomains();
+    
+    const interval = setInterval(fetchDomains, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      router.push('/login');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Domain Status Dashboard</h1>
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            Logout
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 rounded-md bg-red-50 p-4">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Your Monitored Domains</h2>
+          <DomainList domains={domains} />
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <h3 className="text-lg font-medium text-gray-800 mb-4">Add New Domain</h3>
+            <AddDomainForm onDomainAdded={fetchDomains} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
