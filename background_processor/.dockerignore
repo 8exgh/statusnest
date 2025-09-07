@@ -1,0 +1,59 @@
+# Dependencies
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# TypeScript source files (we only need dist)
+src/
+*.ts
+!*.d.ts
+
+# Development files
+.git
+.gitignore
+README.md
+.env*.local
+.env.development
+.env.test
+tsconfig.json
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage
+.nyc_output
+jest.config.js
+__tests__
+__mocks__
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# Documentation
+docs
+*.md
+
+# Misc
+.dockerignore
+Dockerfile
+docker-compose*.yml
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# Data (will be mounted as volume)
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Build artifacts (will be built fresh)
+dist/
