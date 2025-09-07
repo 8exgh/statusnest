@@ -4,19 +4,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# TypeScript source files (we only need dist)
-src/
-*.ts
-!*.d.ts
-
 # Development files
 .git
 .gitignore
 README.md
-.env*.local
 .env.development
 .env.test
-tsconfig.json
 
 # IDE files
 .vscode
