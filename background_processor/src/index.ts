@@ -58,11 +58,7 @@ class BackgroundProcessor {
     assert(task.domain, "Domain is required");
     assert(task.domainId, "Domain ID is required");
     
-    console.log(`Checking ${task.domain}...`);
-    
     const result = await checkDomainStatus(task.domain);
-    
-    console.log(`${task.domain}: ${result.status} (${result.responseTimeMs}ms)`);
     
     await this.apiClient.updateDomainStatus({
       domainId: task.domainId,
