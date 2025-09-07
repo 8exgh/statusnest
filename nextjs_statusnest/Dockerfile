@@ -34,7 +34,7 @@ COPY --from=builder /app/components ./components
 COPY --from=builder /app/types ./types
 
 # Create data directory for SQLite databases
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data && chmod 755 /app/data
 
 # Set environment variables
 ENV DATABASE_PATH=/app/data \
