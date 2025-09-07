@@ -11,7 +11,7 @@ StatusNest is a domain monitoring service built with CQRS (Command Query Respons
 1. **nextjs_statusnest** (Root folder)
    - Next.js application with integrated backend
    - CQRS implementation with Event Sourcing
-   - Secure API endpoints
+   - Secure API endpointsss
    - Frontend UI with Tailwind CSS
    - TypeScript throughout
 

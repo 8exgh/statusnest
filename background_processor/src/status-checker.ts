@@ -20,7 +20,7 @@ export async function checkDomainStatus(domain: string): Promise<CheckResult> {
       redirect: 'follow',
       signal: controller.signal
     });
-    
+
     clearTimeout(timeout);
     
     responseCode = response.status;

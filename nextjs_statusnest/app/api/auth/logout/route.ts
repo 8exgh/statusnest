@@ -9,11 +9,7 @@ export async function POST(request: NextRequest) {
       await invalidateSession(token);
     }
     
-    const response = NextResponse.json({ success: true });
-    
-    response.cookies.delete('session');
-    
-    return response;
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Logout error:', error);
     return NextResponse.json(

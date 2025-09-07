@@ -43,6 +43,11 @@ export default function RegisterPage() {
         throw new Error(data.error || 'Registration failed');
       }
 
+      // Store token in localStorage
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      }
+
       router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');

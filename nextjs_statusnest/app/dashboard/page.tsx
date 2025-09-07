@@ -14,10 +14,21 @@ export default function Dashboard() {
 
   const fetchDomains = async () => {
     try {
-      const response = await fetch('/api/domains/status');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      const response = await fetch('/api/domains/status', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       
       if (!response.ok) {
         if (response.status === 401) {
+          localStorage.removeItem('token');
           router.push('/login');
           return;
         }
@@ -44,7 +55,16 @@ export default function Dashboard() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      const token = localStorage.getItem('token');
+      if (token) {
+        await fetch('/api/auth/logout', { 
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      }
+      localStorage.removeItem('token');
       router.push('/login');
     } catch (err) {
       console.error('Logout error:', err);

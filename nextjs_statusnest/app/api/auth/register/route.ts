@@ -50,22 +50,13 @@ export async function POST(request: NextRequest) {
     
     const { session, token } = await createSession(user.id);
     
-    const response = NextResponse.json({
+    return NextResponse.json({
       user: {
         id: user.id,
         email: user.email
       },
       token
     });
-    
-    response.cookies.set('session', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60
-    });
-    
-    return response;
   } catch (error) {
     console.error('Registration error:', error);
     return NextResponse.json(
