@@ -2,12 +2,13 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# install deps
+# install deps (including devDependencies for build)
 COPY package*.json ./
-RUN npm install
+COPY tsconfig.json ./
+RUN npm ci
 
 # copy source
-COPY . .
+COPY src ./src
 
 # copy env file if exists
 COPY .env.local* ./
@@ -23,11 +24,13 @@ ENV NODE_ENV=production
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
 
-# only bring over what the app needs at runtime
-COPY --from=builder /app/package*.json ./
+# Copy package files and install only production dependencies
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Copy built application from builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/.env.local* ./
-COPY --from=builder /app/node_modules ./node_modules
 
 # Create data directory for SQLite databases
 RUN mkdir -p /app/data
