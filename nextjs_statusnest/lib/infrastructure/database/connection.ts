@@ -86,6 +86,7 @@ export function getReadModelDatabase(): Database.Database {
       domain TEXT NOT NULL,
       user_id TEXT NOT NULL,
       status TEXT CHECK(status IN ('online', 'offline', 'unknown')),
+      active INTEGER DEFAULT 1,
       last_checked_at TIMESTAMP,
       next_check_at TIMESTAMP,
       response_code INTEGER,
@@ -97,6 +98,7 @@ export function getReadModelDatabase(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_domain ON domain_monitors(domain);
     CREATE INDEX IF NOT EXISTS idx_user ON domain_monitors(user_id);
     CREATE INDEX IF NOT EXISTS idx_next_check ON domain_monitors(next_check_at);
+    CREATE INDEX IF NOT EXISTS idx_active ON domain_monitors(active);
     
     CREATE TABLE IF NOT EXISTS projection_checkpoints (
       user_id TEXT PRIMARY KEY,

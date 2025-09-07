@@ -53,6 +53,32 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleToggleDomain = async (domainId: string, active: boolean) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch('/api/domains/toggle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ domainId, active })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle domain');
+      }
+
+      // Refresh domains list
+      await fetchDomains();
+    } catch (err) {
+      console.error('Toggle error:', err);
+      setError('Failed to toggle domain status');
+    }
+  };
+
   const handleLogout = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -100,7 +126,7 @@ export default function Dashboard() {
 
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Your Monitored Domains</h2>
-          <DomainList domains={domains} />
+          <DomainList domains={domains} onToggle={handleToggleDomain} />
           <div className="mt-8 pt-6 border-t border-gray-200">
             <h3 className="text-lg font-medium text-gray-800 mb-4">Add New Domain</h3>
             <AddDomainForm onDomainAdded={fetchDomains} />

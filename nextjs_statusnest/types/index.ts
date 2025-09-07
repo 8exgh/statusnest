@@ -37,6 +37,7 @@ export interface DomainMonitor {
   domain: string;
   userId: string;
   status: 'online' | 'offline' | 'unknown';
+  active: boolean;
   lastCheckedAt?: Date;
   nextCheckAt?: Date;
   responseCode?: number;
@@ -92,5 +93,17 @@ export interface DomainCheckScheduledEvent {
   domainId: string;
   domain: string;
   scheduledFor: Date;
+  timestamp: Date;
+}
+
+export interface DomainActivatedEvent {
+  domainId: string;
+  domain: string;
+  timestamp: Date;
+}
+
+export interface DomainDeactivatedEvent {
+  domainId: string;
+  domain: string;
   timestamp: Date;
 }

@@ -28,6 +28,10 @@ export class CommandBus {
         return this.handleCheckDomainStatus(command);
       case 'ScheduleDomainCheck':
         return this.handleScheduleDomainCheck(command);
+      case 'ActivateDomain':
+        return this.handleActivateDomain(command);
+      case 'DeactivateDomain':
+        return this.handleDeactivateDomain(command);
       default:
         throw new Error(`Unknown command type: ${command.type}`);
     }
@@ -133,6 +137,68 @@ export class CommandBus {
           domainId,
           domain,
           scheduledFor: new Date(scheduledFor),
+          timestamp: now
+        },
+        createdAt: now,
+        sequenceNumber: 0
+      }
+    ];
+  }
+  
+  private handleActivateDomain(command: Command): Event[] {
+    const { domainId, domain } = command.payload;
+    assert(domainId, "Domain ID is required");
+    assert(domain, "Domain is required");
+    
+    const now = new Date();
+    
+    return [
+      {
+        aggregateId: domainId,
+        aggregateType: 'Domain',
+        eventType: 'DomainActivatedEvent',
+        eventVersion: 1,
+        eventData: {
+          domainId,
+          domain,
+          timestamp: now
+        },
+        createdAt: now,
+        sequenceNumber: 0
+      },
+      {
+        aggregateId: domainId,
+        aggregateType: 'Domain',
+        eventType: 'DomainCheckScheduledEvent',
+        eventVersion: 1,
+        eventData: {
+          domainId,
+          domain,
+          scheduledFor: now,
+          timestamp: now
+        },
+        createdAt: now,
+        sequenceNumber: 0
+      }
+    ];
+  }
+  
+  private handleDeactivateDomain(command: Command): Event[] {
+    const { domainId, domain } = command.payload;
+    assert(domainId, "Domain ID is required");
+    assert(domain, "Domain is required");
+    
+    const now = new Date();
+    
+    return [
+      {
+        aggregateId: domainId,
+        aggregateType: 'Domain',
+        eventType: 'DomainDeactivatedEvent',
+        eventVersion: 1,
+        eventData: {
+          domainId,
+          domain,
           timestamp: now
         },
         createdAt: now,

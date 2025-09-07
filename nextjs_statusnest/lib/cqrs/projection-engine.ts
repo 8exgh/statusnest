@@ -93,6 +93,12 @@ export class ProjectionEngine {
       case 'DomainCheckScheduledEvent':
         this.projectDomainCheckScheduled(db, event);
         break;
+      case 'DomainActivatedEvent':
+        this.projectDomainActivated(db, event);
+        break;
+      case 'DomainDeactivatedEvent':
+        this.projectDomainDeactivated(db, event);
+        break;
     }
   }
   
@@ -101,8 +107,8 @@ export class ProjectionEngine {
     
     const insert = db.prepare(`
       INSERT INTO domain_monitors (
-        id, domain, user_id, status, created_at, updated_at
-      ) VALUES (?, ?, ?, 'unknown', ?, ?)
+        id, domain, user_id, status, active, created_at, updated_at
+      ) VALUES (?, ?, ?, 'unknown', 1, ?, ?)
     `);
     
     const now = new Date().toISOString();
@@ -148,6 +154,33 @@ export class ProjectionEngine {
       new Date().toISOString(),
       domainId
     );
+  }
+  
+  private projectDomainActivated(db: any, event: Event): void {
+    const { domainId } = event.eventData;
+    
+    const update = db.prepare(`
+      UPDATE domain_monitors SET
+        active = 1,
+        updated_at = ?
+      WHERE id = ?
+    `);
+    
+    update.run(new Date().toISOString(), domainId);
+  }
+  
+  private projectDomainDeactivated(db: any, event: Event): void {
+    const { domainId } = event.eventData;
+    
+    const update = db.prepare(`
+      UPDATE domain_monitors SET
+        active = 0,
+        next_check_at = NULL,
+        updated_at = ?
+      WHERE id = ?
+    `);
+    
+    update.run(new Date().toISOString(), domainId);
   }
 }
 

@@ -20,6 +20,7 @@ export class QueryBus {
       domain: row.domain,
       userId: row.user_id,
       status: row.status || 'unknown',
+      active: Boolean(row.active),
       lastCheckedAt: row.last_checked_at ? new Date(row.last_checked_at) : undefined,
       nextCheckAt: row.next_check_at ? new Date(row.next_check_at) : undefined,
       responseCode: row.response_code,
@@ -35,7 +36,8 @@ export class QueryBus {
     const stmt = db.prepare(`
       SELECT id, domain, user_id 
       FROM domain_monitors 
-      WHERE next_check_at IS NULL OR next_check_at <= ?
+      WHERE active = 1 
+        AND (next_check_at IS NULL OR next_check_at <= ?)
       ORDER BY next_check_at ASC
       LIMIT 100
     `);
@@ -68,6 +70,7 @@ export class QueryBus {
       domain: row.domain,
       userId: row.user_id,
       status: row.status || 'unknown',
+      active: Boolean(row.active),
       lastCheckedAt: row.last_checked_at ? new Date(row.last_checked_at) : undefined,
       nextCheckAt: row.next_check_at ? new Date(row.next_check_at) : undefined,
       responseCode: row.response_code,
