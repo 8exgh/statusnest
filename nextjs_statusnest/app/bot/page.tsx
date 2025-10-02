@@ -73,7 +73,7 @@ export default function BotPage() {
           <div className="space-y-6">
             <div>
               <h3 className="text-xl font-semibold text-gray-700 mb-2">User Agent</h3>
-              <code className="bg-gray-100 px-3 py-1 rounded text-sm">
+              <code className="bg-black px-3 py-1 rounded text-sm">
                 Mozilla/5.0 (compatible; StatusNestBacklinkSpider/1.0; +https://statusnest.com/bot)
               </code>
             </div>
