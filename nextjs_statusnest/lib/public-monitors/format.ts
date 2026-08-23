@@ -153,3 +153,8 @@ export function cadenceSentence(tier: string, name: string): string {
     ? `${name} is one of our headline sites, so it is checked ${describeCadence('primary')} — more often than the rest.`
     : `${name} is checked ${describeCadence('standard')}.`;
 }
+
+/** "1 check" / "2 checks" — avoids "1 checks" in chart labels and tooltips. */
+export function plural(count: number, singular: string, pluralForm?: string): string {
+  return `${count} ${count === 1 ? singular : pluralForm ?? `${singular}s`}`;
+}

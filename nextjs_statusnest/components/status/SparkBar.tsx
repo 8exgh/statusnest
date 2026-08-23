@@ -1,6 +1,7 @@
 import type { SparkRun } from '@/lib/public-monitors/queries';
 import HatchPattern from './HatchPattern';
 import { STATUS_COLORS } from './palette';
+import { plural } from '@/lib/public-monitors/format';
 
 interface SparkBarProps {
   /** Runs of consecutive checks sharing a status, oldest first. */
@@ -44,7 +45,7 @@ export default function SparkBar({ spark, checks, id, subject, height = 10 }: Sp
   const total = spark.reduce((sum, run) => sum + run.weight, 0);
   const gaps = GAP * Math.max(0, spark.length - 1);
   const usable = Math.max(1, WIDTH - gaps);
-  const summary = `${subject}: ${checks} checks in the last 24 hours, ${checks - offline} online, ${offline} unavailable.`;
+  const summary = `${subject}: ${plural(checks, 'check')} in the last 24 hours, ${checks - offline} online, ${offline} unavailable.`;
 
   let x = 0;
   const segments = spark.map((run, i) => {

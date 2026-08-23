@@ -1,5 +1,5 @@
 import type { PublicPageCheck } from '@/types';
-import { formatDateTimeUTC, formatMs, formatTimeUTC } from '@/lib/public-monitors/format';
+import { formatDateTimeUTC, formatMs, formatTimeUTC, plural } from '@/lib/public-monitors/format';
 import ChartLegend from './ChartLegend';
 import BlockedPattern from './BlockedPattern';
 import HatchPattern from './HatchPattern';
@@ -103,7 +103,7 @@ export default function CheckStrip({ checks, id, subject, legend = true, height 
   const offlineCount = checks.length - online - blockedCount;
   const summary =
     checks.length > 0
-      ? `${subject}: ${checks.length} checks in the last 24 hours, ${online} online, ${offlineCount} unavailable${blockedCount ? `, ${blockedCount} could not be verified` : ''}.`
+      ? `${subject}: ${plural(checks.length, 'check')} in the last 24 hours, ${online} online, ${offlineCount} unavailable${blockedCount ? `, ${blockedCount} could not be verified` : ''}.`
       : `${subject}: no checks in the last 24 hours yet.`;
 
   // A handful of real check times under the strip (HTML, so the text never
