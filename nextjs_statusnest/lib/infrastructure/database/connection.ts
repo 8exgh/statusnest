@@ -133,6 +133,61 @@ export function getReadModelDatabase(): Database.Database {
   ensureColumn(db, 'domain_monitors', 'last_alert_channels', 'JSON');
   ensureColumn(db, 'domain_monitors', 'last_alert_error', 'TEXT');
   
+  // Public monitors (SEO status pages): sites, their pages, and check history.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS public_sites (
+      id TEXT PRIMARY KEY,
+      slug TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      description TEXT,
+      position INTEGER DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      status TEXT CHECK(status IN ('online', 'offline', 'unknown')) DEFAULT 'unknown',
+      last_checked_at TIMESTAMP,
+      next_check_at TIMESTAMP,
+      claimed_at TIMESTAMP,
+      created_at TIMESTAMP,
+      updated_at TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_public_sites_due ON public_sites(active, next_check_at);
+    
+    CREATE TABLE IF NOT EXISTS public_pages (
+      id TEXT PRIMARY KEY,
+      site_id TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      position INTEGER DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      status TEXT CHECK(status IN ('online', 'offline', 'unknown')) DEFAULT 'unknown',
+      response_code INTEGER,
+      response_time_ms INTEGER,
+      last_checked_at TIMESTAMP,
+      last_online_at TIMESTAMP,
+      last_offline_at TIMESTAMP,
+      created_at TIMESTAMP,
+      updated_at TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_public_pages_site ON public_pages(site_id, position);
+    
+    CREATE TABLE IF NOT EXISTS public_page_checks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      page_id TEXT NOT NULL,
+      site_id TEXT NOT NULL,
+      checked_at TIMESTAMP NOT NULL,
+      status TEXT CHECK(status IN ('online', 'offline')) NOT NULL,
+      response_code INTEGER,
+      response_time_ms INTEGER,
+      final_url TEXT,
+      title TEXT,
+      error TEXT,
+      blocked INTEGER DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_public_page_checks_page ON public_page_checks(page_id, checked_at);
+    CREATE INDEX IF NOT EXISTS idx_public_page_checks_site ON public_page_checks(site_id, checked_at);
+  `);
+  
   return db;
 }
 

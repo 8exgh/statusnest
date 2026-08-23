@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { initializeApp } from "@/lib/startup";
+import { getSiteUrl } from "@/lib/site-url";
+import SiteFooter from "@/components/SiteFooter";
 
 initializeApp();
 
@@ -16,6 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(getSiteUrl()),
   title: "StatusNest - Domain Monitoring",
   description: "Monitor your domains with real-time status updates",
 };
@@ -31,6 +34,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+        <SiteFooter />
       </body>
     </html>
   );

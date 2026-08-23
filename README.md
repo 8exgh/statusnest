@@ -4,8 +4,9 @@ A domain monitoring service built with CQRS (Command Query Responsibility Segreg
 
 ## Architecture
 
-- **nextjs_statusnest**: Main Next.js application with CQRS/Event Sourcing backend
-- **background_processor**: Node.js application for asynchronous domain checking
+- **nextjs_statusnest**: Main Next.js application with CQRS/Event Sourcing backend and the public SEO status pages
+- **background_processor**: Node.js application for asynchronous domain checking (users' domains)
+- **browser_checker**: Playwright + headed Chromium on a virtual display (Xvfb), in Docker, for the public "top sites" monitors
 
 ## Quick Start
 
@@ -35,9 +36,29 @@ npm run dev
 - Domain monitoring with 5-minute interval checks
 - Real-time status updates (1-second polling)
 - **Offline alerts**: a phone call + SMS (or email) the moment a domain goes offline (via AlertTray)
+- **Public status pages** for the world's top websites, checked from a real browser (`/status`)
 - CQRS with Event Sourcing architecture
 - Separate write and read models
 - Individual SQLite databases per user
+
+## Public Status Pages (SEO)
+
+`/status` publishes live, server-rendered status pages for ten popular websites — Google, YouTube, Wikipedia,
+GitHub, Discord, Steam, Netflix, Spotify, Microsoft and Apple — three pages each, e.g. `/status/github` and
+`/status/github/explore`. Each site is loaded in a **real, headed Chromium browser on a virtual display**
+(the `browser_checker` container) roughly every 15 minutes on a randomised 5–20 minute schedule, and every page
+shows green/red check history for the last 24 hours, 90-day daily uptime, response times and recent incidents.
+These monitors are independent of user accounts and never trigger AlertTray; they exist for the status pages
+(and the search traffic they attract). The list lives in `nextjs_statusnest/lib/public-monitors/sites.ts`.
+
+```bash
+cd browser_checker
+npm install
+docker build -t browser-checker-statusnest .
+docker run --rm --network host --shm-size=1g \
+  -e STATUSNEST_API_URL=http://localhost:3000 -e API_KEY=<BACKGROUND_PROCESSOR_API_KEY> \
+  browser-checker-statusnest
+```
 
 ## Offline Alerts
 

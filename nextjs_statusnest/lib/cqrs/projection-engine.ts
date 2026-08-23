@@ -1,6 +1,7 @@
 import { Event, DomainMonitor, ProjectionCheckpoint } from '@/types';
 import { EventStore } from './event-store';
 import { getReadModelDatabase, getAllUserIds } from '@/lib/infrastructure/database/connection';
+import { CHECK_RETENTION_DAYS } from '@/lib/public-monitors/schedule';
 
 export class ProjectionEngine {
   private checkInterval = 1000;
@@ -107,6 +108,24 @@ export class ProjectionEngine {
         break;
       // ContactDetailsUpdatedEvent: contact details are read from the system
       // database, so there is nothing to project.
+      case 'PublicSiteRegisteredEvent':
+        this.projectPublicSiteRegistered(db, event);
+        break;
+      case 'PublicPageRegisteredEvent':
+        this.projectPublicPageRegistered(db, event);
+        break;
+      case 'PublicSiteDeactivatedEvent':
+        this.projectPublicSiteDeactivated(db, event);
+        break;
+      case 'PublicPageDeactivatedEvent':
+        this.projectPublicPageDeactivated(db, event);
+        break;
+      case 'PublicPageCheckedEvent':
+        this.projectPublicPageChecked(db, event);
+        break;
+      case 'PublicSiteCheckScheduledEvent':
+        this.projectPublicSiteCheckScheduled(db, event);
+        break;
     }
   }
   
@@ -229,6 +248,98 @@ export class ProjectionEngine {
       new Date().toISOString(),
       domainId
     );
+  }
+  
+  // ---------------------------------------------------------------------
+  // Public monitors. Registrations are upserts so re-seeding is harmless.
+  // ---------------------------------------------------------------------
+  
+  private projectPublicSiteRegistered(db: any, event: Event): void {
+    const { siteId, slug, name, url, description, position } = event.eventData;
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO public_sites (id, slug, name, url, description, position, active, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, 'unknown', ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        slug = excluded.slug,
+        name = excluded.name,
+        url = excluded.url,
+        description = excluded.description,
+        position = excluded.position,
+        active = 1,
+        updated_at = excluded.updated_at
+    `).run(siteId, slug, name, url, description ?? '', position ?? 0, now, now);
+  }
+  
+  private projectPublicPageRegistered(db: any, event: Event): void {
+    const { pageId, siteId, slug, name, url, position } = event.eventData;
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO public_pages (id, site_id, slug, name, url, position, active, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, 'unknown', ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        site_id = excluded.site_id,
+        slug = excluded.slug,
+        name = excluded.name,
+        url = excluded.url,
+        position = excluded.position,
+        active = 1,
+        updated_at = excluded.updated_at
+    `).run(pageId, siteId, slug, name, url, position ?? 0, now, now);
+  }
+  
+  private projectPublicSiteDeactivated(db: any, event: Event): void {
+    const { siteId } = event.eventData;
+    const now = new Date().toISOString();
+    db.prepare('UPDATE public_sites SET active = 0, next_check_at = NULL, claimed_at = NULL, updated_at = ? WHERE id = ?').run(now, siteId);
+    db.prepare('UPDATE public_pages SET active = 0, updated_at = ? WHERE site_id = ?').run(now, siteId);
+  }
+  
+  private projectPublicPageDeactivated(db: any, event: Event): void {
+    const { pageId } = event.eventData;
+    db.prepare('UPDATE public_pages SET active = 0, updated_at = ? WHERE id = ?').run(new Date().toISOString(), pageId);
+  }
+  
+  private projectPublicPageChecked(db: any, event: Event): void {
+    const { pageId, siteId, status, responseCode, responseTimeMs, finalUrl, title, error, blocked, checkedAt } = event.eventData;
+    const checkedAtIso = new Date(checkedAt).toISOString();
+    const now = new Date().toISOString();
+    
+    db.prepare(`
+      INSERT INTO public_page_checks (page_id, site_id, checked_at, status, response_code, response_time_ms, final_url, title, error, blocked)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(pageId, siteId, checkedAtIso, status, responseCode ?? null, responseTimeMs ?? null, finalUrl ?? null, title ?? null, error ?? null, blocked ? 1 : 0);
+    
+    db.prepare(`
+      UPDATE public_pages SET
+        status = ?,
+        response_code = ?,
+        response_time_ms = ?,
+        last_checked_at = ?,
+        last_online_at = CASE WHEN ? = 'online' THEN ? ELSE last_online_at END,
+        last_offline_at = CASE WHEN ? = 'offline' THEN ? ELSE last_offline_at END,
+        updated_at = ?
+      WHERE id = ?
+    `).run(status, responseCode ?? null, responseTimeMs ?? null, checkedAtIso, status, checkedAtIso, status, checkedAtIso, now, pageId);
+    
+    // The site's headline status follows its primary page (position 0).
+    const page = db.prepare('SELECT position FROM public_pages WHERE id = ?').get(pageId) as { position: number } | undefined;
+    if (page && page.position === 0) {
+      db.prepare('UPDATE public_sites SET status = ?, last_checked_at = ?, updated_at = ? WHERE id = ?').run(status, checkedAtIso, now, siteId);
+    } else {
+      db.prepare('UPDATE public_sites SET last_checked_at = ?, updated_at = ? WHERE id = ?').run(checkedAtIso, now, siteId);
+    }
+  }
+  
+  private projectPublicSiteCheckScheduled(db: any, event: Event): void {
+    const { siteId, scheduledFor } = event.eventData;
+    const now = new Date();
+    db.prepare('UPDATE public_sites SET next_check_at = ?, claimed_at = NULL, updated_at = ? WHERE id = ?')
+      .run(new Date(scheduledFor).toISOString(), now.toISOString(), siteId);
+    
+    // Cheap, indexed retention sweep: one per site visit (~100/day).
+    const cutoff = new Date(now.getTime() - CHECK_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare('DELETE FROM public_page_checks WHERE site_id = ? AND checked_at < ?').run(siteId, cutoff);
   }
 }
 

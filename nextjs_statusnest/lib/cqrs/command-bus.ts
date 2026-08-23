@@ -1,6 +1,7 @@
-import { Command, Event } from '@/types';
+import { Command, Event, PublicPageCheckResult } from '@/types';
 import { EventStore, assert } from './event-store';
 import { v4 as uuidv4 } from 'uuid';
+import { scheduleNextPublicCheck } from '@/lib/public-monitors/schedule';
 
 export class CommandBus {
   private eventStore: EventStore;
@@ -38,6 +39,16 @@ export class CommandBus {
         return this.handleRecordOfflineAlertSent(command);
       case 'RecordOfflineAlertFailed':
         return this.handleRecordOfflineAlertFailed(command);
+      case 'RegisterPublicSite':
+        return this.handleRegisterPublicSite(command);
+      case 'RegisterPublicPage':
+        return this.handleRegisterPublicPage(command);
+      case 'DeactivatePublicSite':
+        return this.handleDeactivatePublicSite(command);
+      case 'DeactivatePublicPage':
+        return this.handleDeactivatePublicPage(command);
+      case 'RecordPublicSiteCheck':
+        return this.handleRecordPublicSiteCheck(command);
       default:
         throw new Error(`Unknown command type: ${command.type}`);
     }
@@ -289,5 +300,163 @@ export class CommandBus {
         sequenceNumber: 0
       }
     ];
+  }
+  
+  // ---------------------------------------------------------------------
+  // Public monitors (SEO status pages). Aggregate ids are deterministic
+  // (site slug, "site/page") so the config seed is idempotent.
+  // ---------------------------------------------------------------------
+  
+  private handleRegisterPublicSite(command: Command): Event[] {
+    const { slug, name, url, description = '', position = 0, pages = [] } = command.payload;
+    assert(slug, "Site slug is required");
+    assert(name, "Site name is required");
+    assert(url, "Site URL is required");
+    
+    const siteId = command.aggregateId || slug;
+    const now = new Date();
+    
+    const events: Event[] = [
+      {
+        aggregateId: siteId,
+        aggregateType: 'PublicSite',
+        eventType: 'PublicSiteRegisteredEvent',
+        eventVersion: 1,
+        eventData: { siteId, slug, name, url, description, position, timestamp: now },
+        createdAt: now,
+        sequenceNumber: 0
+      }
+    ];
+    
+    (pages as { slug: string; name: string; url: string }[]).forEach((page, index) => {
+      assert(page.slug && page.name && page.url, "Each page needs slug, name and url");
+      const pageId = `${slug}/${page.slug}`;
+      events.push({
+        aggregateId: pageId,
+        aggregateType: 'PublicPage',
+        eventType: 'PublicPageRegisteredEvent',
+        eventVersion: 1,
+        eventData: { pageId, siteId, slug: page.slug, name: page.name, url: page.url, position: index, timestamp: now },
+        createdAt: now,
+        sequenceNumber: 0
+      });
+    });
+    
+    // First check as soon as a checker is free.
+    events.push({
+      aggregateId: siteId,
+      aggregateType: 'PublicSite',
+      eventType: 'PublicSiteCheckScheduledEvent',
+      eventVersion: 1,
+      eventData: { siteId, scheduledFor: now, timestamp: now },
+      createdAt: now,
+      sequenceNumber: 0
+    });
+    
+    return events;
+  }
+  
+  private handleRegisterPublicPage(command: Command): Event[] {
+    const { siteId, slug, name, url, position = 0 } = command.payload;
+    assert(siteId, "Site ID is required");
+    assert(slug && name && url, "Page slug, name and url are required");
+    
+    const pageId = command.aggregateId || `${siteId}/${slug}`;
+    const now = new Date();
+    
+    return [{
+      aggregateId: pageId,
+      aggregateType: 'PublicPage',
+      eventType: 'PublicPageRegisteredEvent',
+      eventVersion: 1,
+      eventData: { pageId, siteId, slug, name, url, position, timestamp: now },
+      createdAt: now,
+      sequenceNumber: 0
+    }];
+  }
+  
+  private handleDeactivatePublicSite(command: Command): Event[] {
+    const { siteId } = command.payload;
+    assert(siteId, "Site ID is required");
+    const now = new Date();
+    return [{
+      aggregateId: siteId,
+      aggregateType: 'PublicSite',
+      eventType: 'PublicSiteDeactivatedEvent',
+      eventVersion: 1,
+      eventData: { siteId, timestamp: now },
+      createdAt: now,
+      sequenceNumber: 0
+    }];
+  }
+  
+  private handleDeactivatePublicPage(command: Command): Event[] {
+    const { pageId, siteId } = command.payload;
+    assert(pageId, "Page ID is required");
+    assert(siteId, "Site ID is required");
+    const now = new Date();
+    return [{
+      aggregateId: pageId,
+      aggregateType: 'PublicPage',
+      eventType: 'PublicPageDeactivatedEvent',
+      eventVersion: 1,
+      eventData: { pageId, siteId, timestamp: now },
+      createdAt: now,
+      sequenceNumber: 0
+    }];
+  }
+  
+  /**
+   * One browser visit of a site: a result per page, then the next visit is
+   * scheduled with jitter (5–20 min, mode 15). Never touches AlertTray.
+   */
+  private handleRecordPublicSiteCheck(command: Command): Event[] {
+    const { siteId, checker = { engine: 'unknown' } } = command.payload;
+    const results = (command.payload.results ?? []) as PublicPageCheckResult[];
+    assert(siteId, "Site ID is required");
+    assert(results.length > 0, "At least one page result is required");
+    
+    const now = new Date();
+    const checkedAt = command.payload.checkedAt ? new Date(command.payload.checkedAt) : now;
+    assert(!Number.isNaN(checkedAt.getTime()), "checkedAt must be a valid date");
+    
+    const events: Event[] = results.map(result => {
+      assert(result.pageId, "Page ID is required for each result");
+      assert(result.status === 'online' || result.status === 'offline', `Invalid status for ${result.pageId}: ${result.status}`);
+      return {
+        aggregateId: result.pageId,
+        aggregateType: 'PublicPage',
+        eventType: 'PublicPageCheckedEvent',
+        eventVersion: 1,
+        eventData: {
+          pageId: result.pageId,
+          siteId,
+          status: result.status,
+          responseCode: result.responseCode ?? null,
+          responseTimeMs: result.responseTimeMs ?? null,
+          finalUrl: result.finalUrl ?? null,
+          title: result.title ?? null,
+          error: result.error ?? null,
+          blocked: Boolean(result.blocked),
+          checkedAt,
+          checker,
+          timestamp: now
+        },
+        createdAt: now,
+        sequenceNumber: 0
+      };
+    });
+    
+    events.push({
+      aggregateId: siteId,
+      aggregateType: 'PublicSite',
+      eventType: 'PublicSiteCheckScheduledEvent',
+      eventVersion: 1,
+      eventData: { siteId, scheduledFor: scheduleNextPublicCheck(now), timestamp: now },
+      createdAt: now,
+      sequenceNumber: 0
+    });
+    
+    return events;
   }
 }

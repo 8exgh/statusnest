@@ -4,17 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-StatusNest is a domain monitoring service built with CQRS (Command Query Responsibility Segregation) and Event Sourcing patterns. The system consists of two main applications:
-- **nextjs_statusnest**: Next.js application with integrated backend
-- **background_processor**: Node.js application for asynchronous domain status checking
+StatusNest is a domain monitoring service built with CQRS (Command Query Responsibility Segregation) and Event Sourcing patterns. The system consists of three applications:
+- **nextjs_statusnest**: Next.js application with integrated backend, plus the public SEO status pages
+- **background_processor**: Node.js application for asynchronous domain status checking (users' domains; plain HTTP HEAD)
+- **browser_checker**: Node.js + Playwright service that loads the public "top sites" in a real, headed Chromium on a virtual display (Xvfb) inside Docker
 
 ## Project Structure
 
-The repository should contain two root-level applications:
 ```
 statusnest/
-├── nextjs_statusnest/     # Main Next.js application
-└── background_processor/  # Background domain checker
+├── nextjs_statusnest/     # Main Next.js application (+ /status SEO pages)
+├── background_processor/  # Background domain checker for users' domains
+└── browser_checker/       # Chromium-on-Xvfb checker for the public monitors
 ```
 
 ## Development Commands
@@ -41,6 +42,16 @@ npm install
 npm run dev     # Start background processor with tsx watch
 npm run build   # Compile TypeScript
 npm run start   # Run compiled JavaScript
+```
+
+### browser_checker
+```bash
+# Setup (from browser_checker directory)
+npm install
+npx playwright install chromium      # local only; the Docker image already has it
+BROWSER_HEADLESS=1 npm run dev       # local: headless (no X display needed)
+docker build -t browser-checker-statusnest . && \
+  docker run --rm --network host --shm-size=1g -e STATUSNEST_API_URL=http://localhost:3000 -e API_KEY=<key> browser-checker-statusnest
 ```
 
 ## Architecture
@@ -104,6 +115,17 @@ When a domain transitions to `offline` (from `online` or `unknown` — never rep
 - Dashboard polls `/api/domains/status` every 1 second for real-time updates
 - Data served from read model for performance
 
+### Public Monitors (SEO status pages)
+Ten popular, bot-tolerant sites (Google, YouTube, Wikipedia, GitHub, Discord, Steam, Netflix, Spotify, Microsoft, Apple — 3 pages each) are checked from a **real, headed Chromium on Xvfb** and published at server-rendered, indexable URLs. They are system-owned, separate from users' domain monitors, and **never routed to AlertTray**.
+- Config: `nextjs_statusnest/lib/public-monitors/sites.ts` (`PUBLIC_SITES`) is the source of truth. `ensurePublicSites()` (`seed.ts`, run from `initializeApp`) registers new sites/pages, re-registers changed ones and deactivates removed ones — edit the file, restart, done. Aggregate ids are deterministic (`github`, `github/explore`).
+- Events live in the system-owned stream `data/users/public-monitors/write.db` (`PUBLIC_MONITORS_USER_ID`): `PublicSiteRegisteredEvent`, `PublicPageRegisteredEvent`, `PublicSite/PageDeactivatedEvent`, `PublicPageCheckedEvent` (one per page per visit), `PublicSiteCheckScheduledEvent`.
+- Read model: `public_sites` (headline status = primary page, `next_check_at`, `claimed_at`), `public_pages`, `public_page_checks` (history for the graphs, 90-day retention swept on each schedule event).
+- Cadence: after each visit the next one is scheduled with a **triangular jitter 5–20 min, mode 15** (`schedule.ts`), so a site is visited roughly every 13–15 minutes on an irregular pattern.
+- Internal API for the checker (HMAC, same key as the background processor): `GET /api/internal/public-tasks` hands out up to 3 due sites and **claims** them (`claimed_at`, 10-minute expiry) so two checkers never visit the same site; `POST /api/internal/public-check-result` records one visit `{ siteId, checkedAt, checker, results[] }` and schedules the next.
+- `browser_checker/`: visits each page of a site sequentially in a fresh browser context, `online` = HTTP 2xx/3xx and no bot challenge; 403/429/503 or challenge markers ("Just a moment", "Access Denied", captcha…) → `offline` with `blocked: true`.
+- Pages (all `force-dynamic`, SSR, inline-SVG charts, JSON-LD): `/status`, `/status/{site}`, `/status/{site}/{page}`; `sitemap.xml` / `robots.txt`; a live section on `/`. Status colours are the validated pair green `#059669` / red `#dc2626` with hatching + labels so state is never colour-alone.
+- `initializeApp()` is skipped during `next build` (`NEXT_PHASE=phase-production-build`) so builds never touch `data/`.
+
 ## Environment Variables
 
 ### nextjs_statusnest/.env.local
@@ -124,6 +146,17 @@ Production values are injected by the devops repo workflow (`devops/.github/work
 STATUSNEST_API_URL=http://localhost:3000
 API_KEY=<same-as-BACKGROUND_PROCESSOR_API_KEY>
 ```
+
+### browser_checker/.env
+```
+STATUSNEST_API_URL=http://localhost:3000
+API_KEY=<same-as-BACKGROUND_PROCESSOR_API_KEY>
+# POLL_INTERVAL_MS=30000
+# NAVIGATION_TIMEOUT_MS=30000
+# BROWSER_HEADLESS=1        # local dev without a display; the container uses Xvfb
+```
+
+`NEXT_PUBLIC_SITE_URL` (default `https://statusnest.com`) is the base for canonical URLs, the sitemap and JSON-LD.
 
 ## Testing
 
@@ -147,3 +180,7 @@ npm test:e2e    # End-to-end tests
 - node-fetch for HTTP requests
 - dotenv for environment variables
 - tsx for TypeScript execution in development
+
+### browser_checker
+- playwright (Chromium) — Docker image `mcr.microsoft.com/playwright:<version>-noble` provides the browser, its libraries and `xvfb-run`
+- dotenv, tsx

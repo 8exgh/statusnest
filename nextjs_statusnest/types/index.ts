@@ -150,3 +150,130 @@ export interface DomainOfflineAlertFailedEvent {
   error: string;
   timestamp: Date;
 }
+
+// ---------------------------------------------------------------------------
+// Public monitors: well-known sites checked from a real Chromium browser and
+// published on the SEO status pages (/status/...). System-owned, not tied to a
+// user, and never routed to AlertTray.
+// ---------------------------------------------------------------------------
+
+export type PublicCheckStatus = 'online' | 'offline';
+export type PublicMonitorStatus = PublicCheckStatus | 'unknown';
+
+export interface PublicPage {
+  id: string;
+  siteId: string;
+  slug: string;
+  name: string;
+  url: string;
+  position: number;
+  active: boolean;
+  status: PublicMonitorStatus;
+  responseCode?: number;
+  responseTimeMs?: number;
+  lastCheckedAt?: Date;
+  lastOnlineAt?: Date;
+  lastOfflineAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PublicSite {
+  id: string;
+  slug: string;
+  name: string;
+  url: string;
+  description: string;
+  position: number;
+  active: boolean;
+  /** Status of the site's primary page (position 0). */
+  status: PublicMonitorStatus;
+  lastCheckedAt?: Date;
+  nextCheckAt?: Date;
+  claimedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  pages: PublicPage[];
+}
+
+export interface PublicPageCheck {
+  id: number;
+  pageId: string;
+  siteId: string;
+  checkedAt: Date;
+  status: PublicCheckStatus;
+  responseCode?: number;
+  responseTimeMs?: number;
+  finalUrl?: string;
+  title?: string;
+  error?: string;
+  /** The site answered but served a bot challenge / access-denied page. */
+  blocked: boolean;
+}
+
+/** What the browser checker reports for one page. */
+export interface PublicPageCheckResult {
+  pageId: string;
+  status: PublicCheckStatus;
+  responseCode?: number;
+  responseTimeMs?: number;
+  finalUrl?: string;
+  title?: string;
+  error?: string;
+  blocked?: boolean;
+}
+
+export interface PublicCheckerInfo {
+  /** e.g. "chromium" */
+  engine: string;
+  version?: string;
+  userAgent?: string;
+  /** e.g. "xvfb" when a real window was used, "headless" otherwise */
+  display?: string;
+}
+
+export interface PublicSiteRegisteredEvent {
+  siteId: string;
+  slug: string;
+  name: string;
+  url: string;
+  description: string;
+  position: number;
+  timestamp: Date;
+}
+
+export interface PublicPageRegisteredEvent {
+  pageId: string;
+  siteId: string;
+  slug: string;
+  name: string;
+  url: string;
+  position: number;
+  timestamp: Date;
+}
+
+export interface PublicSiteDeactivatedEvent {
+  siteId: string;
+  timestamp: Date;
+}
+
+export interface PublicPageDeactivatedEvent {
+  pageId: string;
+  siteId: string;
+  timestamp: Date;
+}
+
+export interface PublicPageCheckedEvent extends PublicPageCheckResult {
+  siteId: string;
+  blocked: boolean;
+  checkedAt: Date;
+  checker: PublicCheckerInfo;
+  timestamp: Date;
+}
+
+export interface PublicSiteCheckScheduledEvent {
+  siteId: string;
+  scheduledFor: Date;
+  timestamp: Date;
+}
+
