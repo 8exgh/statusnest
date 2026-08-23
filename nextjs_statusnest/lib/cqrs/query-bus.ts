@@ -15,19 +15,7 @@ export class QueryBus {
     
     db.close();
     
-    return rows.map(row => ({
-      id: row.id,
-      domain: row.domain,
-      userId: row.user_id,
-      status: row.status || 'unknown',
-      active: Boolean(row.active),
-      lastCheckedAt: row.last_checked_at ? new Date(row.last_checked_at) : undefined,
-      nextCheckAt: row.next_check_at ? new Date(row.next_check_at) : undefined,
-      responseCode: row.response_code,
-      responseTimeMs: row.response_time_ms,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
-    }));
+    return rows.map(mapDomainMonitorRow);
   }
   
   async getPendingChecks(): Promise<Task[]> {
@@ -65,18 +53,35 @@ export class QueryBus {
       return null;
     }
     
-    return {
-      id: row.id,
-      domain: row.domain,
-      userId: row.user_id,
-      status: row.status || 'unknown',
-      active: Boolean(row.active),
-      lastCheckedAt: row.last_checked_at ? new Date(row.last_checked_at) : undefined,
-      nextCheckAt: row.next_check_at ? new Date(row.next_check_at) : undefined,
-      responseCode: row.response_code,
-      responseTimeMs: row.response_time_ms,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
-    };
+    return mapDomainMonitorRow(row);
   }
+}
+
+function parseChannels(value: unknown): string[] | undefined {
+  if (typeof value !== 'string' || value === '') return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function mapDomainMonitorRow(row: any): DomainMonitor {
+  return {
+    id: row.id,
+    domain: row.domain,
+    userId: row.user_id,
+    status: row.status || 'unknown',
+    active: Boolean(row.active),
+    lastCheckedAt: row.last_checked_at ? new Date(row.last_checked_at) : undefined,
+    nextCheckAt: row.next_check_at ? new Date(row.next_check_at) : undefined,
+    responseCode: row.response_code,
+    responseTimeMs: row.response_time_ms,
+    lastAlertAt: row.last_alert_at ? new Date(row.last_alert_at) : undefined,
+    lastAlertChannels: parseChannels(row.last_alert_channels),
+    lastAlertError: row.last_alert_error || undefined,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at)
+  };
 }

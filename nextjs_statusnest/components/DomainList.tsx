@@ -26,6 +26,20 @@ export default function DomainList({ domains, onToggle }: DomainListProps) {
     return new Date(date).toLocaleString();
   };
 
+  // Channels the owner is reached on. AlertTray may also push to the
+  // operator's iPhone (apns), which is not the user's channel, so hide it.
+  const CHANNEL_LABELS: Record<string, string> = {
+    call: 'phone call',
+    sms: 'SMS',
+    email: 'email',
+  };
+  const describeChannels = (channels?: string[]) => {
+    const labels = (channels ?? [])
+      .filter((c) => c in CHANNEL_LABELS)
+      .map((c) => CHANNEL_LABELS[c]);
+    return labels.length > 0 ? labels.join(', ') : 'no channels';
+  };
+
   const handleToggle = async (domainId: string, currentActive: boolean) => {
     if (!onToggle) return;
     
@@ -86,6 +100,17 @@ export default function DomainList({ domains, onToggle }: DomainListProps) {
                     )}
                     {domain.responseTimeMs && (
                       <p>Response time: {domain.responseTimeMs}ms</p>
+                    )}
+                    {domain.lastAlertAt && (
+                      domain.lastAlertError ? (
+                        <p className="text-red-700">
+                          Offline alert failed {formatDate(domain.lastAlertAt)}: {domain.lastAlertError}
+                        </p>
+                      ) : (
+                        <p className="text-orange-700">
+                          Offline alert sent {formatDate(domain.lastAlertAt)} via {describeChannels(domain.lastAlertChannels)}
+                        </p>
+                      )
                     )}
                   </>
                 ) : (

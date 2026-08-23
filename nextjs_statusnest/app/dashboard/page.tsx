@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import DomainList from '@/components/DomainList';
 import AddDomainForm from '@/components/AddDomainForm';
 import { DomainMonitor } from '@/types';
@@ -11,6 +12,23 @@ export default function Dashboard() {
   const [domains, setDomains] = useState<DomainMonitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // null until loaded; true when the user has no phone number for offline alerts
+  const [phoneMissing, setPhoneMissing] = useState<boolean | null>(null);
+
+  const fetchContact = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const response = await fetch('/api/contact', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      setPhoneMissing(!data.contact?.phoneNumber);
+    } catch (err) {
+      console.error('Contact fetch error:', err);
+    }
+  };
 
   const fetchDomains = async () => {
     try {
@@ -47,6 +65,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDomains();
+    fetchContact();
     
     const interval = setInterval(fetchDomains, 1000);
     
@@ -110,17 +129,40 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Domain Status Dashboard</h1>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/profile"
+              className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Profile
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         {error && (
           <div className="mb-4 rounded-md bg-red-50 p-4">
             <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+
+        {phoneMissing && (
+          <div className="mb-4 rounded-md bg-yellow-50 border border-yellow-200 p-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-yellow-800">
+              <strong>Add your phone number</strong> so StatusNest can call and text you the moment a site goes offline.
+              Until then offline alerts go out by email only.
+            </p>
+            <Link
+              href="/profile"
+              className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 rounded-lg transition-colors"
+            >
+              Set up alerts
+            </Link>
           </div>
         )}
 

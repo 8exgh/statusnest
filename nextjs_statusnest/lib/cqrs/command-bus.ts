@@ -32,6 +32,12 @@ export class CommandBus {
         return this.handleActivateDomain(command);
       case 'DeactivateDomain':
         return this.handleDeactivateDomain(command);
+      case 'UpdateContactDetails':
+        return this.handleUpdateContactDetails(command);
+      case 'RecordOfflineAlertSent':
+        return this.handleRecordOfflineAlertSent(command);
+      case 'RecordOfflineAlertFailed':
+        return this.handleRecordOfflineAlertFailed(command);
       default:
         throw new Error(`Unknown command type: ${command.type}`);
     }
@@ -199,6 +205,84 @@ export class CommandBus {
         eventData: {
           domainId,
           domain,
+          timestamp: now
+        },
+        createdAt: now,
+        sequenceNumber: 0
+      }
+    ];
+  }
+  
+  private handleUpdateContactDetails(command: Command): Event[] {
+    const { phoneNumber = null, notificationEmail = null } = command.payload;
+    
+    const now = new Date();
+    
+    return [
+      {
+        aggregateId: command.userId,
+        aggregateType: 'User',
+        eventType: 'ContactDetailsUpdatedEvent',
+        eventVersion: 1,
+        eventData: {
+          userId: command.userId,
+          phoneNumber,
+          notificationEmail,
+          timestamp: now
+        },
+        createdAt: now,
+        sequenceNumber: 0
+      }
+    ];
+  }
+  
+  private handleRecordOfflineAlertSent(command: Command): Event[] {
+    const { domainId, domain, notificationId, channels, skippedChannels, recipients } = command.payload;
+    assert(domainId, "Domain ID is required");
+    assert(domain, "Domain is required");
+    assert(notificationId, "AlertTray notification ID is required");
+    
+    const now = new Date();
+    
+    return [
+      {
+        aggregateId: domainId,
+        aggregateType: 'Domain',
+        eventType: 'DomainOfflineAlertSentEvent',
+        eventVersion: 1,
+        eventData: {
+          domainId,
+          domain,
+          notificationId,
+          channels: channels ?? [],
+          skippedChannels: skippedChannels ?? [],
+          recipients: recipients ?? { phoneNumber: null, email: null },
+          timestamp: now
+        },
+        createdAt: now,
+        sequenceNumber: 0
+      }
+    ];
+  }
+  
+  private handleRecordOfflineAlertFailed(command: Command): Event[] {
+    const { domainId, domain, error } = command.payload;
+    assert(domainId, "Domain ID is required");
+    assert(domain, "Domain is required");
+    assert(error, "Failure reason is required");
+    
+    const now = new Date();
+    
+    return [
+      {
+        aggregateId: domainId,
+        aggregateType: 'Domain',
+        eventType: 'DomainOfflineAlertFailedEvent',
+        eventVersion: 1,
+        eventData: {
+          domainId,
+          domain,
+          error,
           timestamp: now
         },
         createdAt: now,

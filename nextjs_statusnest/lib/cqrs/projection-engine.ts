@@ -99,6 +99,14 @@ export class ProjectionEngine {
       case 'DomainDeactivatedEvent':
         this.projectDomainDeactivated(db, event);
         break;
+      case 'DomainOfflineAlertSentEvent':
+        this.projectOfflineAlertSent(db, event);
+        break;
+      case 'DomainOfflineAlertFailedEvent':
+        this.projectOfflineAlertFailed(db, event);
+        break;
+      // ContactDetailsUpdatedEvent: contact details are read from the system
+      // database, so there is nothing to project.
     }
   }
   
@@ -181,6 +189,46 @@ export class ProjectionEngine {
     `);
     
     update.run(new Date().toISOString(), domainId);
+  }
+  
+  private projectOfflineAlertSent(db: any, event: Event): void {
+    const { domainId, channels, timestamp } = event.eventData;
+    
+    const update = db.prepare(`
+      UPDATE domain_monitors SET
+        last_alert_at = ?,
+        last_alert_channels = ?,
+        last_alert_error = NULL,
+        updated_at = ?
+      WHERE id = ?
+    `);
+    
+    update.run(
+      new Date(timestamp).toISOString(),
+      JSON.stringify(channels ?? []),
+      new Date().toISOString(),
+      domainId
+    );
+  }
+  
+  private projectOfflineAlertFailed(db: any, event: Event): void {
+    const { domainId, error, timestamp } = event.eventData;
+    
+    const update = db.prepare(`
+      UPDATE domain_monitors SET
+        last_alert_at = ?,
+        last_alert_channels = NULL,
+        last_alert_error = ?,
+        updated_at = ?
+      WHERE id = ?
+    `);
+    
+    update.run(
+      new Date(timestamp).toISOString(),
+      error,
+      new Date().toISOString(),
+      domainId
+    );
   }
 }
 

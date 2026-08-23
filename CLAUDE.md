@@ -56,27 +56,41 @@ npm run start   # Run compiled JavaScript
 
 #### Event Types
 - `UserRegisteredEvent`: User account creation
+- `ContactDetailsUpdatedEvent`: Phone number / alert email changed (User aggregate)
 - `DomainRegisteredEvent`: New domain monitoring setup
 - `DomainStatusCheckedEvent`: Domain check result
 - `DomainCheckScheduledEvent`: Next check scheduling
+- `DomainActivatedEvent` / `DomainDeactivatedEvent`: Monitoring paused/resumed
+- `DomainOfflineAlertSentEvent` / `DomainOfflineAlertFailedEvent`: Outcome of the AlertTray offline alert
 
 #### API Structure
 - `/api/auth/*`: Authentication endpoints (register, login, logout)
-- `/api/domains/*`: Domain management (register, status)
+- `/api/domains/*`: Domain management (register, status, toggle)
+- `/api/contact`: Current user's phone number / alert email (`GET`, `PUT`; session auth) — edited on `/profile`
 - `/api/internal/*`: Secured endpoints for background_processor (tasks, status-update)
+
+### Offline Alerts (via AlertTray)
+When a domain transitions to `offline` (from `online` or `unknown` — never repeated while it stays offline), the owner is alerted through [AlertTray](https://alerttray.com) at severity `critical`, its highest level, which AlertTray delivers as a **phone call + SMS** to the user's phone number and falls back to **email** when no phone number is set.
+- Trigger: `app/api/internal/status-update/route.ts` compares the read-model status before the check with the new one (`shouldAlertOffline`) and calls `alertDomainOffline`.
+- `lib/alerts/offline-alerts.ts`: transition rule, alert wording (plain text — AlertTray reads it out on the call), and recording of `DomainOfflineAlertSentEvent` / `DomainOfflineAlertFailedEvent`. Delivery problems never fail the status update.
+- `lib/alerts/alerttray-client.ts`: `POST {ALERTTRAY_API_URL}/api/notifications/push` with `X-API-Key`. The request carries `recipients: { phoneNumber, email }` so AlertTray reaches the StatusNest user rather than the AlertTray account holder (AlertTray feature added for this integration).
+- `lib/infrastructure/users/contact-details.ts`: phone number (E.164) and alert email stored on the `users` row in system.db; `getAlertRecipients` falls back to the account email so there is always an email channel.
+- Read model: `domain_monitors.last_alert_at / last_alert_channels / last_alert_error` (idempotent `ensureColumn` migrations) — shown on the dashboard.
+- Without `ALERTTRAY_API_KEY` the alert is logged and recorded as failed (`DomainOfflineAlertFailedEvent`), nothing is sent.
 
 ### Security
 - HMAC signatures for internal API communication using shared `BACKGROUND_PROCESSOR_API_KEY`
 - Session-based authentication for users
 - Bcrypt password hashing (min 10 rounds)
 - User data isolation through separate databases
+- Outbound AlertTray calls authenticate with `ALERTTRAY_API_KEY` (an AlertTray `atk_…` key)
 
 ## Key Implementation Details
 
 ### Database Schema Locations
 - User events table: Single `events` table with indexes on aggregate_id, created_at, and sequence_number
-- Read model: `domain_monitors` table with status tracking and `projection_checkpoints` for sync tracking
-- System: `users` and `sessions` tables for authentication
+- Read model: `domain_monitors` table with status tracking (plus `last_alert_*` columns) and `projection_checkpoints` for sync tracking
+- System: `users` (incl. `phone_number`, `notification_email`) and `sessions` tables for authentication
 
 ### Background Processing Flow
 1. Background processor polls `/api/internal/tasks` every 5 seconds
@@ -84,6 +98,7 @@ npm run start   # Run compiled JavaScript
 3. Performs HTTP GET with 10-second timeout
 4. Reports status via `/api/internal/status-update`
 5. System writes events and schedules next check (+5 minutes)
+6. If the domain just went offline, the system pushes a `critical` alert to AlertTray (call + SMS, email fallback) and records the outcome
 
 ### Frontend Polling
 - Dashboard polls `/api/domains/status` every 1 second for real-time updates
@@ -96,7 +111,13 @@ npm run start   # Run compiled JavaScript
 DATABASE_PATH=./data
 SESSION_SECRET=<random-32-char-string>
 BACKGROUND_PROCESSOR_API_KEY=<random-32-char-string>
+
+# Offline alerts via AlertTray (phone call + SMS + email)
+ALERTTRAY_API_URL=https://alerttray.com      # or a local AlertTray, e.g. http://localhost:3001
+ALERTTRAY_API_KEY=atk_<key from the AlertTray dashboard>
 ```
+
+Production values are injected by the devops repo workflow (`devops/.github/workflows/deploy-statusnest_nextjs.yml`) as `-e` flags; `ALERTTRAY_API_URL` / `ALERTTRAY_API_KEY` must be added there (secret `STATUSNEST_ALERTTRAY_API_KEY`).
 
 ### background_processor/.env
 ```
