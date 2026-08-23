@@ -320,7 +320,7 @@ export const PUBLIC_SITES: PublicSiteConfig[] = [
     category: 'video',
     pages: [
       { slug: 'home', name: 'Crunchyroll', url: 'https://www.crunchyroll.com/' },
-      { slug: 'videos', name: 'Crunchyroll Popular', url: 'https://www.crunchyroll.com/videos/popular' },
+      { slug: 'news', name: 'Crunchyroll News', url: 'https://www.crunchyroll.com/news' },
       { slug: 'help', name: 'Crunchyroll Help', url: 'https://help.crunchyroll.com/' },
     ],
   },
@@ -491,7 +491,7 @@ export const PUBLIC_SITES: PublicSiteConfig[] = [
     pages: [
       { slug: 'home', name: 'EA', url: 'https://www.ea.com/' },
       { slug: 'games', name: 'EA Games', url: 'https://www.ea.com/games' },
-      { slug: 'help', name: 'EA Help', url: 'https://help.ea.com/en/' },
+      { slug: 'news', name: 'EA News', url: 'https://www.ea.com/news' },
     ],
   },
   {
@@ -503,7 +503,7 @@ export const PUBLIC_SITES: PublicSiteConfig[] = [
     pages: [
       { slug: 'home', name: 'Epic Games', url: 'https://www.epicgames.com/site/en-US/home' },
       { slug: 'store', name: 'Epic Games Store', url: 'https://store.epicgames.com/en-US/' },
-      { slug: 'help', name: 'Epic Games Help', url: 'https://www.epicgames.com/help/en-US/' },
+      { slug: 'news', name: 'Epic Games News', url: 'https://www.epicgames.com/site/en-US/news' },
     ],
   },
   {
@@ -622,7 +622,7 @@ export const PUBLIC_SITES: PublicSiteConfig[] = [
     category: 'ai',
     pages: [
       { slug: 'home', name: 'Midjourney', url: 'https://www.midjourney.com/home' },
-      { slug: 'showcase', name: 'Midjourney Showcase', url: 'https://www.midjourney.com/showcase' },
+      { slug: 'explore', name: 'Midjourney Explore', url: 'https://www.midjourney.com/explore' },
       { slug: 'docs', name: 'Midjourney Docs', url: 'https://docs.midjourney.com/' },
     ],
   },
@@ -634,8 +634,8 @@ export const PUBLIC_SITES: PublicSiteConfig[] = [
     category: 'ai',
     pages: [
       { slug: 'home', name: 'OpenAI', url: 'https://openai.com/' },
-      { slug: 'chatgpt', name: 'ChatGPT', url: 'https://openai.com/chatgpt/overview/' },
-      { slug: 'api', name: 'OpenAI Platform', url: 'https://platform.openai.com/docs/overview' },
+      { slug: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/' },
+      { slug: 'help', name: 'OpenAI Help Center', url: 'https://help.openai.com/' },
     ],
   },
   {
@@ -646,8 +646,8 @@ export const PUBLIC_SITES: PublicSiteConfig[] = [
     category: 'ai',
     pages: [
       { slug: 'home', name: 'Perplexity', url: 'https://www.perplexity.ai/' },
-      { slug: 'discover', name: 'Perplexity Discover', url: 'https://www.perplexity.ai/discover' },
-      { slug: 'hub', name: 'Perplexity Help', url: 'https://www.perplexity.ai/hub/faq' },
+      { slug: 'enterprise', name: 'Perplexity Enterprise', url: 'https://www.perplexity.ai/enterprise' },
+      { slug: 'docs', name: 'Perplexity Docs', url: 'https://docs.perplexity.ai/' },
     ],
   },
   {
@@ -791,8 +791,8 @@ export const PUBLIC_SITES: PublicSiteConfig[] = [
     category: 'cloud',
     pages: [
       { slug: 'home', name: 'Canva', url: 'https://www.canva.com/' },
-      { slug: 'pricing', name: 'Canva Pricing', url: 'https://www.canva.com/pricing/' },
-      { slug: 'templates', name: 'Canva Templates', url: 'https://www.canva.com/templates/' },
+      { slug: 'features', name: 'Canva Features', url: 'https://www.canva.com/features/' },
+      { slug: 'help', name: 'Canva Help', url: 'https://www.canva.com/help/' },
     ],
   },
   {
@@ -1117,7 +1117,7 @@ export const PUBLIC_SITES: PublicSiteConfig[] = [
     pages: [
       { slug: 'home', name: 'Coinbase', url: 'https://www.coinbase.com/' },
       { slug: 'prices', name: 'Coinbase Prices', url: 'https://www.coinbase.com/explore' },
-      { slug: 'learn', name: 'Coinbase Learn', url: 'https://www.coinbase.com/learn' },
+      { slug: 'price', name: 'Coinbase Prices', url: 'https://www.coinbase.com/price' },
     ],
   },
   {
@@ -1272,7 +1272,7 @@ export const PUBLIC_SITES: PublicSiteConfig[] = [
     category: 'learning',
     pages: [
       { slug: 'home', name: 'Udemy', url: 'https://www.udemy.com/' },
-      { slug: 'development', name: 'Udemy Development', url: 'https://www.udemy.com/courses/development/' },
+      { slug: 'business', name: 'Udemy Business', url: 'https://business.udemy.com/' },
       { slug: 'support', name: 'Udemy Support', url: 'https://support.udemy.com/' },
     ],
   },
