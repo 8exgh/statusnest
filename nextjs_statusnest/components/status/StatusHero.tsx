@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import type { PublicMonitorStatus } from '@/types';
-import { relativeTime, statusLabel } from '@/lib/public-monitors/format';
+import { relativeTime, verifyLabel, type VerifyState } from '@/lib/public-monitors/format';
 import StatusPill from './StatusPill';
 
 interface Crumb {
@@ -13,16 +12,18 @@ interface StatusHeroProps {
   heading: string;
   /** Name used in the badge label, e.g. "GitHub" → "GitHub is up". */
   subjectName: string;
-  status: PublicMonitorStatus;
+  status: VerifyState;
   lastCheckedAt?: Date;
   now: Date;
   /** Extra line under the badge (e.g. HTTP code and load time). */
   detail?: React.ReactNode;
+  /** Callout under the header, e.g. explaining a bot challenge. */
+  note?: React.ReactNode;
   /** Outbound link to the monitored site/page. */
   externalUrl?: string;
 }
 
-export default function StatusHero({ crumbs, heading, subjectName, status, lastCheckedAt, now, detail, externalUrl }: StatusHeroProps) {
+export default function StatusHero({ crumbs, heading, subjectName, status, lastCheckedAt, now, detail, note, externalUrl }: StatusHeroProps) {
   return (
     <header className="mb-8">
       <nav aria-label="Breadcrumb" className="mb-3 text-sm text-gray-500">
@@ -43,7 +44,7 @@ export default function StatusHero({ crumbs, heading, subjectName, status, lastC
       </nav>
       <h1 className="text-3xl font-bold text-gray-900 sm:text-4xl">{heading}</h1>
       <div className="mt-5 flex flex-wrap items-center gap-4">
-        <StatusPill status={status} label={statusLabel(status, subjectName)} size="lg" />
+        <StatusPill status={status} label={verifyLabel(status, subjectName)} size="lg" />
         <div className="text-sm text-gray-600">
           <p>
             Last checked <strong className="font-medium text-gray-900">{relativeTime(lastCheckedAt, now)}</strong> from a real Chromium browser
@@ -65,6 +66,9 @@ export default function StatusHero({ crumbs, heading, subjectName, status, lastC
           )}
         </div>
       </div>
+      {note && (
+        <div className="mt-4 rounded-lg border border-slate-300 bg-slate-50 p-3 text-sm text-gray-700">{note}</div>
+      )}
     </header>
   );
 }

@@ -1,4 +1,5 @@
 import type { PublicMonitorStatus } from '@/types';
+import { asCheckTier, describeCadence } from './schedule';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -80,6 +81,46 @@ export function formatDayUTC(isoDay: string, withYear = false): string {
   return withYear ? `${base}, ${y}` : base;
 }
 
+/**
+ * What we display, as opposed to what is stored.
+ *
+ * A site that answers a bot challenge tells us nothing about whether it is up
+ * — it is usually fine and simply refusing an automated visitor — so it gets
+ * its own state rather than being reported as an outage.
+ */
+export type VerifyState = 'online' | 'offline' | 'blocked' | 'unknown';
+
+export function verifyState(status: PublicMonitorStatus, latestBlocked?: boolean): VerifyState {
+  return latestBlocked ? 'blocked' : status;
+}
+
+export function verifyLabel(state: VerifyState, name?: string): string {
+  switch (state) {
+    case 'online':
+      return name ? `${name} is up` : 'Online';
+    case 'offline':
+      return name ? `${name} is unavailable` : 'Unavailable';
+    case 'blocked':
+      return name ? `Couldn’t verify ${name}` : 'Couldn’t verify';
+    default:
+      return 'Not checked yet';
+  }
+}
+
+/**
+ * One sentence for the hero when the latest check was a bot challenge: says
+ * what we saw, what it usually means, and what we last actually observed.
+ */
+export function blockedExplanation(name: string, lastStatus: PublicMonitorStatus, lastSeen: Date | undefined, now: Date): string {
+  const seen =
+    lastStatus === 'online'
+      ? `we last confirmed it up ${relativeTime(lastSeen, now)}`
+      : lastStatus === 'offline'
+        ? `the last check we could complete found it unavailable ${relativeTime(lastSeen, now)}`
+        : 'we have not completed a check yet';
+  return `${name} showed a bot check to our browser instead of the page. That normally means the site is up but refusing automated visitors, so we do not count it as an outage — ${seen}.`;
+}
+
 export function statusLabel(status: PublicMonitorStatus, name?: string): string {
   switch (status) {
     case 'online':
@@ -101,3 +142,14 @@ export function subjectName(siteName: string, pageName?: string): string {
   return pageName.toLowerCase().includes(siteName.toLowerCase()) ? pageName : `${siteName} ${pageName}`;
 }
 
+/** "every 5–20 minutes" / "every 20–60 minutes" for a site's cadence tier. */
+export function cadenceFor(tier: string): string {
+  return describeCadence(asCheckTier(tier));
+}
+
+/** One plain sentence about how often this subject is checked, and why. */
+export function cadenceSentence(tier: string, name: string): string {
+  return asCheckTier(tier) === 'primary'
+    ? `${name} is one of our headline sites, so it is checked ${describeCadence('primary')} — more often than the rest.`
+    : `${name} is checked ${describeCadence('standard')}.`;
+}

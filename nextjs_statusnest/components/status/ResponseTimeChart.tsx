@@ -1,6 +1,7 @@
 import type { PublicPageCheck } from '@/types';
 import { formatDateTimeUTC, formatMs, formatTimeUTC } from '@/lib/public-monitors/format';
 import ChartLegend from './ChartLegend';
+import BlockedPattern from './BlockedPattern';
 import HatchPattern from './HatchPattern';
 import { STATUS_COLORS } from './palette';
 
@@ -29,18 +30,22 @@ function niceMax(value: number): number {
 /**
  * Page load time for every online check in the window as a single 2px line,
  * with unavailable checks drawn as hatched red marks on the baseline so an
- * outage is visible in the same picture.
+ * outage is visible in the same picture. Checks that hit a bot challenge are
+ * marked separately in dotted slate — they are not outages and their timings
+ * measure the challenge page, so they stay off the line.
  */
 export default function ResponseTimeChart({ checks, id, subject, now, hours = 24 }: ResponseTimeChartProps) {
   const hatchId = `${id}-hatch`;
+  const blockedId = `${id}-blocked`;
   const end = now.getTime();
   const start = end - hours * HOUR_MS;
   const plotW = WIDTH - MARGIN.left - MARGIN.right;
   const plotH = HEIGHT - MARGIN.top - MARGIN.bottom;
 
   const inWindow = checks.filter((c) => c.checkedAt.getTime() >= start && c.checkedAt.getTime() <= end);
-  const online = inWindow.filter((c) => c.status === 'online' && typeof c.responseTimeMs === 'number');
-  const offline = inWindow.filter((c) => c.status === 'offline');
+  const online = inWindow.filter((c) => !c.blocked && c.status === 'online' && typeof c.responseTimeMs === 'number');
+  const offline = inWindow.filter((c) => !c.blocked && c.status === 'offline');
+  const blocked = inWindow.filter((c) => c.blocked);
   const maxMs = niceMax(Math.max(0, ...online.map((c) => c.responseTimeMs as number)) * 1.1);
 
   const x = (t: number) => MARGIN.left + ((t - start) / (end - start)) * plotW;
@@ -66,7 +71,7 @@ export default function ResponseTimeChart({ checks, id, subject, now, hours = 24
   const avg = online.length ? Math.round(online.reduce((s, c) => s + (c.responseTimeMs as number), 0) / online.length) : null;
   const summary =
     online.length > 0
-      ? `${subject}: page load time over the last ${hours} hours, ${online.length} measurements averaging ${formatMs(avg)}${offline.length ? `, ${offline.length} unavailable checks` : ''}.`
+      ? `${subject}: page load time over the last ${hours} hours, ${online.length} measurements averaging ${formatMs(avg)}${offline.length ? `, ${offline.length} unavailable checks` : ''}${blocked.length ? `, ${blocked.length} checks that could not be verified` : ''}.`
       : `${subject}: no load-time measurements in the last ${hours} hours.`;
 
   const last = points[points.length - 1];
@@ -79,6 +84,7 @@ export default function ResponseTimeChart({ checks, id, subject, now, hours = 24
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" role="img" aria-label={summary} className="block min-w-[640px]">
         <title>{summary}</title>
         <HatchPattern id={hatchId} />
+        <BlockedPattern id={blockedId} />
         {yTicks.map((ms) => (
           <g key={ms}>
             <line x1={MARGIN.left} x2={WIDTH - MARGIN.right} y1={y(ms)} y2={y(ms)} stroke={STATUS_COLORS.grid} strokeWidth={1} />
@@ -131,6 +137,21 @@ export default function ResponseTimeChart({ checks, id, subject, now, hours = 24
             <title>{`${formatDateTimeUTC(c.checkedAt)} — Unavailable${c.responseCode ? ` · HTTP ${c.responseCode}` : c.error ? ` · ${c.error}` : ''}`}</title>
           </rect>
         ))}
+        {blocked.map((c) => (
+          <rect
+            key={`b-${c.id}`}
+            x={x(c.checkedAt.getTime()) - 4}
+            y={MARGIN.top + plotH - 10}
+            width={8}
+            height={10}
+            rx={1.5}
+            fill={`url(#${blockedId})`}
+            stroke={STATUS_COLORS.blocked}
+            strokeWidth={1}
+          >
+            <title>{`${formatDateTimeUTC(c.checkedAt)} — Couldn’t verify: bot check${c.responseCode ? ` · HTTP ${c.responseCode}` : ''}. Not counted as an outage.`}</title>
+          </rect>
+        ))}
         {last && (
           <circle cx={last.px} cy={last.py} r={4} fill={STATUS_COLORS.series} stroke="#ffffff" strokeWidth={2}>
             <title>{`Latest: ${formatDateTimeUTC(last.c.checkedAt)} — ${formatMs(last.c.responseTimeMs)}`}</title>
@@ -154,6 +175,7 @@ export default function ResponseTimeChart({ checks, id, subject, now, hours = 24
           items={[
             { kind: 'series', label: avg !== null ? `Page load time (avg ${formatMs(avg)})` : 'Page load time' },
             { kind: 'offline', label: 'Unavailable check' },
+            ...(blocked.length > 0 ? ([{ kind: 'blocked', label: 'Couldn’t verify (bot check)' }] as const) : []),
           ]}
         />
         <span className="text-xs text-gray-500">Times in UTC · hover for details</span>

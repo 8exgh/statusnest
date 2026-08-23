@@ -1,6 +1,7 @@
 import { CommandBus } from '@/lib/cqrs/command-bus';
 import { PublicMonitorQueries } from './queries';
 import { PUBLIC_SITES, publicPageId, publicSiteId, isValidSlug } from './sites';
+import { DEFAULT_CHECK_TIER } from './schedule';
 
 /** The system-owned event stream that holds every public-monitor event. */
 export const PUBLIC_MONITORS_USER_ID = 'public-monitors';
@@ -28,18 +29,29 @@ export async function ensurePublicSites(): Promise<void> {
     configured.add(siteId);
     const current = existing.get(siteId);
     
+    const tier = site.tier ?? DEFAULT_CHECK_TIER;
     const siteChanged = !current || !current.active ||
       current.name !== site.name || current.url !== site.url ||
-      current.description !== site.description || current.position !== position;
+      current.description !== site.description || current.position !== position ||
+      current.category !== site.category || current.tier !== tier;
     
     if (siteChanged) {
       await commandBus.dispatch({
         userId: PUBLIC_MONITORS_USER_ID,
         aggregateId: siteId,
         type: 'RegisterPublicSite',
-        payload: { slug: site.slug, name: site.name, url: site.url, description: site.description, position, pages: site.pages }
+        payload: {
+          slug: site.slug,
+          name: site.name,
+          url: site.url,
+          description: site.description,
+          category: site.category,
+          tier,
+          position,
+          pages: site.pages
+        }
       });
-      console.log(`Public monitors: ${current ? 'updated' : 'registered'} ${site.slug} (${site.pages.length} pages)`);
+      console.log(`Public monitors: ${current ? 'updated' : 'registered'} ${site.slug} (${site.pages.length} pages, ${tier})`);
       continue;
     }
     

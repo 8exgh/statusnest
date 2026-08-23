@@ -9,9 +9,20 @@ import { describeBlock, isBotBlocked } from './block-detection';
  * a headless one. Set BROWSER_HEADLESS=1 to run without a display locally.
  */
 
-const NAVIGATION_TIMEOUT_MS = Number(process.env.NAVIGATION_TIMEOUT_MS) || 30_000;
-const LOAD_SETTLE_TIMEOUT_MS = 10_000;
+export const NAVIGATION_TIMEOUT_MS = Number(process.env.NAVIGATION_TIMEOUT_MS) || 30_000;
+export const LOAD_SETTLE_TIMEOUT_MS = 10_000;
 const HEADLESS = process.env.BROWSER_HEADLESS === '1';
+
+/**
+ * Context options every visit uses. Deliberately NOT overriding the user
+ * agent: headed Chromium's real UA is the point. Shared so one-off tools
+ * (verify-sites) see exactly what the production checker sees.
+ */
+export const BROWSER_CONTEXT_OPTIONS = {
+  viewport: { width: 1366, height: 768 },
+  locale: 'en-US',
+  extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
+} as const;
 
 export interface SiteVisit {
   checkedAt: string;
@@ -68,11 +79,7 @@ export class BrowserChecker {
   async visitSite(task: PublicSiteTask): Promise<SiteVisit> {
     const checkedAt = new Date().toISOString();
     const browser = await this.getBrowser();
-    const context = await browser.newContext({
-      viewport: { width: 1366, height: 768 },
-      locale: 'en-US',
-      extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
-    });
+    const context = await browser.newContext({ ...BROWSER_CONTEXT_OPTIONS });
 
     let userAgent: string | undefined;
     const results: PageCheckResult[] = [];
@@ -83,7 +90,7 @@ export class BrowserChecker {
           if (!userAgent) {
             userAgent = await page.evaluate(() => navigator.userAgent).catch(() => undefined);
           }
-          const result = await this.visitPage(page, pageTask.pageId, pageTask.url);
+          const result = await visitPage(page, pageTask.pageId, pageTask.url);
           results.push(result);
           const code = result.responseCode ?? '-';
           const ms = result.responseTimeMs !== undefined ? `${result.responseTimeMs}ms` : 'n/a';
@@ -108,52 +115,57 @@ export class BrowserChecker {
       results,
     };
   }
+}
 
-  private async visitPage(page: Page, pageId: string, url: string): Promise<PageCheckResult> {
-    const started = Date.now();
-    try {
-      const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
-      const responseTimeMs = Date.now() - started;
+/**
+ * Visit one URL and decide online/offline. The single source of truth for what
+ * counts as available — the poll loop and the verify-sites tool both call it,
+ * so a site vetted offline here is one the live checker would record offline.
+ */
+export async function visitPage(page: Page, pageId: string, url: string): Promise<PageCheckResult> {
+  const started = Date.now();
+  try {
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
+    const responseTimeMs = Date.now() - started;
 
-      // Let the page settle a little so challenge pages have rendered their text.
-      await page.waitForLoadState('load', { timeout: LOAD_SETTLE_TIMEOUT_MS }).catch(() => undefined);
+    // Let the page settle a little so challenge pages have rendered their text.
+    await page.waitForLoadState('load', { timeout: LOAD_SETTLE_TIMEOUT_MS }).catch(() => undefined);
 
-      const responseCode = response?.status();
-      const finalUrl = page.url();
-      const title = (await page.title().catch(() => ''))?.trim().slice(0, 300) || undefined;
-      const bodyText = await page
-        .evaluate(() => (document.body?.innerText ?? '').slice(0, 2000))
-        .catch(() => '');
+    const responseCode = response?.status();
+    const finalUrl = page.url();
+    const title = (await page.title().catch(() => ''))?.trim().slice(0, 300) || undefined;
+    const bodyText = await page
+      .evaluate(() => (document.body?.innerText ?? '').slice(0, 2000))
+      .catch(() => '');
 
-      const blocked = isBotBlocked({ status: responseCode, title, bodyText });
+    const blocked = isBotBlocked({ status: responseCode, title, bodyText });
 
-      if (!response) {
-        // Navigations to about:blank or same-document navigations have no response.
-        return { pageId, status: 'offline', responseTimeMs, finalUrl, title, error: 'No HTTP response', blocked: false };
-      }
-
-      const code = response.status();
-
-      if (blocked) {
-        return { pageId, status: 'offline', responseCode: code, responseTimeMs, finalUrl, title, error: describeBlock(code), blocked: true };
-      }
-
-      if (code >= 200 && code < 400) {
-        return { pageId, status: 'online', responseCode: code, responseTimeMs, finalUrl, title, blocked: false };
-      }
-
-      return { pageId, status: 'offline', responseCode: code, responseTimeMs, finalUrl, title, error: `HTTP ${code}`, blocked: false };
-    } catch (error) {
-      const responseTimeMs = Date.now() - started;
-      return {
-        pageId,
-        status: 'offline',
-        responseTimeMs,
-        finalUrl: safeUrl(page),
-        error: describeNavigationError(error, responseTimeMs),
-        blocked: false,
-      };
+    if (!response) {
+      // Navigations to about:blank or same-document navigations have no response.
+      return { pageId, status: 'offline', responseTimeMs, finalUrl, title, error: 'No HTTP response', blocked: false };
     }
+
+    const code = response.status();
+
+    if (blocked) {
+      return { pageId, status: 'offline', responseCode: code, responseTimeMs, finalUrl, title, error: describeBlock(code), blocked: true };
+    }
+
+    if (code >= 200 && code < 400) {
+      return { pageId, status: 'online', responseCode: code, responseTimeMs, finalUrl, title, blocked: false };
+    }
+
+    return { pageId, status: 'offline', responseCode: code, responseTimeMs, finalUrl, title, error: `HTTP ${code}`, blocked: false };
+  } catch (error) {
+    const responseTimeMs = Date.now() - started;
+    return {
+      pageId,
+      status: 'offline',
+      responseTimeMs,
+      finalUrl: safeUrl(page),
+      error: describeNavigationError(error, responseTimeMs),
+      blocked: false,
+    };
   }
 }
 

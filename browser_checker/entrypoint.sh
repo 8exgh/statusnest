@@ -33,4 +33,10 @@ while [ ! -S "/tmp/.X11-unix/X${DISPLAY_NUM}" ]; do
 done
 echo "Xvfb ready on $DISPLAY ($SCREEN)"
 
+# Run the container's command on that display (CMD below is the poll loop, so
+# production behaviour is unchanged); one-off tools such as verify-sites can be
+# passed instead: docker run <image> node dist/verify-sites.js ...
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
 exec node dist/index.js

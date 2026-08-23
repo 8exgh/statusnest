@@ -6,6 +6,15 @@
 export const STATUS_COLORS = {
   online: '#059669',
   offline: '#dc2626',
+  /**
+   * "Couldn't verify" — the site served a bot challenge, so we learned nothing.
+   * Slate rather than amber on purpose: amber reads as a warning about the
+   * site, and every amber tested collided with red for colour-blind readers
+   * (deutan ΔE as low as 2.8). Slate passes all six checks against both green
+   * and red on light and dark surfaces (normal ΔE 24.4, tritan 28.7), and
+   * "no information" is what grey means. Always paired with a dot texture.
+   */
+  blocked: '#64748b',
   none: '#d1d5db',
   /** Single-series neutral for the response-time line. */
   series: '#2563eb',

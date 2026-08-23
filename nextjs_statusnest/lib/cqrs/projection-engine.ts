@@ -255,20 +255,22 @@ export class ProjectionEngine {
   // ---------------------------------------------------------------------
   
   private projectPublicSiteRegistered(db: any, event: Event): void {
-    const { siteId, slug, name, url, description, position } = event.eventData;
+    const { siteId, slug, name, url, description, category, tier, position } = event.eventData;
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO public_sites (id, slug, name, url, description, position, active, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, 'unknown', ?, ?)
+      INSERT INTO public_sites (id, slug, name, url, description, category, tier, position, active, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'unknown', ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         slug = excluded.slug,
         name = excluded.name,
         url = excluded.url,
         description = excluded.description,
+        category = excluded.category,
+        tier = excluded.tier,
         position = excluded.position,
         active = 1,
         updated_at = excluded.updated_at
-    `).run(siteId, slug, name, url, description ?? '', position ?? 0, now, now);
+    `).run(siteId, slug, name, url, description ?? '', category ?? 'other', tier ?? 'standard', position ?? 0, now, now);
   }
   
   private projectPublicPageRegistered(db: any, event: Event): void {
@@ -309,6 +311,17 @@ export class ProjectionEngine {
       INSERT INTO public_page_checks (page_id, site_id, checked_at, status, response_code, response_time_ms, final_url, title, error, blocked)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(pageId, siteId, checkedAtIso, status, responseCode ?? null, responseTimeMs ?? null, finalUrl ?? null, title ?? null, error ?? null, blocked ? 1 : 0);
+    
+    // A bot challenge means we could not verify the page — it does NOT mean the
+    // site is down (it is usually up and simply refusing an automated visitor).
+    // Record the attempt, but leave the last known status alone so the status
+    // pages never claim an outage we did not observe.
+    if (blocked) {
+      db.prepare('UPDATE public_pages SET response_code = ?, response_time_ms = ?, last_checked_at = ?, updated_at = ? WHERE id = ?')
+        .run(responseCode ?? null, responseTimeMs ?? null, checkedAtIso, now, pageId);
+      db.prepare('UPDATE public_sites SET last_checked_at = ?, updated_at = ? WHERE id = ?').run(checkedAtIso, now, siteId);
+      return;
+    }
     
     db.prepare(`
       UPDATE public_pages SET

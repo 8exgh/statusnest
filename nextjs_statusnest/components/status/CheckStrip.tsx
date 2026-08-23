@@ -1,6 +1,7 @@
 import type { PublicPageCheck } from '@/types';
 import { formatDateTimeUTC, formatMs, formatTimeUTC } from '@/lib/public-monitors/format';
 import ChartLegend from './ChartLegend';
+import BlockedPattern from './BlockedPattern';
 import HatchPattern from './HatchPattern';
 import { STATUS_COLORS } from './palette';
 
@@ -23,30 +24,45 @@ interface CheckStripProps {
   maxBars?: number;
 }
 
+type BarState = 'online' | 'offline' | 'blocked';
+
 interface Bar {
   key: string;
-  status: 'online' | 'offline';
+  status: BarState;
   /** First check's time (for axis labels). */
   at: Date;
   tip: string;
 }
 
+function stateOf(check: PublicPageCheck): BarState {
+  return check.blocked ? 'blocked' : check.status;
+}
+
 function toBars(checks: PublicPageCheck[], maxBars?: number): Bar[] {
   if (!maxBars || checks.length <= maxBars) {
-    return checks.map((c) => ({ key: String(c.id), status: c.status, at: c.checkedAt, tip: describe(c) }));
+    return checks.map((c) => ({ key: String(c.id), status: stateOf(c), at: c.checkedAt, tip: describe(c) }));
   }
   const size = Math.ceil(checks.length / maxBars);
   const bars: Bar[] = [];
   for (let i = 0; i < checks.length; i += size) {
     const group = checks.slice(i, i + size);
-    const down = group.filter((c) => c.status === 'offline').length;
+    const down = group.filter((c) => stateOf(c) === 'offline').length;
+    const blocked = group.filter((c) => stateOf(c) === 'blocked').length;
     const first = group[0];
     const last = group[group.length - 1];
+    // A real outage in the bucket outranks a bot challenge, which outranks OK.
+    const status: BarState = down > 0 ? 'offline' : blocked > 0 ? 'blocked' : 'online';
+    const detail =
+      down > 0
+        ? `${down} unavailable`
+        : blocked > 0
+          ? `${blocked} couldn’t be verified`
+          : 'all online';
     bars.push({
       key: `${first.id}-${last.id}`,
-      status: down > 0 ? 'offline' : 'online',
+      status,
       at: first.checkedAt,
-      tip: `${formatTimeUTC(first.checkedAt)}–${formatTimeUTC(last.checkedAt)} UTC — ${group.length} check${group.length === 1 ? '' : 's'}, ${down === 0 ? 'all online' : `${down} unavailable`}`,
+      tip: `${formatTimeUTC(first.checkedAt)}–${formatTimeUTC(last.checkedAt)} UTC — ${group.length} check${group.length === 1 ? '' : 's'}, ${detail}`,
     });
   }
   return bars;
@@ -58,17 +74,22 @@ const MIN_BAR = 6;
 const PLACEHOLDER_SLOTS = 96;
 
 function describe(check: PublicPageCheck): string {
-  const state = check.status === 'online' ? 'Online' : check.blocked ? 'Unavailable (bot challenge)' : 'Unavailable';
   const code = check.responseCode ? `HTTP ${check.responseCode}` : check.error ? check.error : 'no response';
+  if (check.blocked) {
+    return `${formatDateTimeUTC(check.checkedAt)} — Couldn’t verify: the site showed a bot check (${code}). Not counted as an outage.`;
+  }
+  const state = check.status === 'online' ? 'Online' : 'Unavailable';
   return `${formatDateTimeUTC(check.checkedAt)} — ${state} · ${code} · ${formatMs(check.responseTimeMs)}`;
 }
 
 /**
  * One rounded bar per check, oldest on the left. Green = online, red with a
- * diagonal hatch = unavailable, light gray = no check in that slot.
+ * diagonal hatch = unavailable, dotted slate = couldn't verify (bot check),
+ * light gray = no check in that slot.
  */
 export default function CheckStrip({ checks, id, subject, legend = true, height = 36, maxBars }: CheckStripProps) {
   const hatchId = `${id}-hatch`;
+  const blockedId = `${id}-blocked`;
   const bars = toBars(checks, maxBars);
   const n = bars.length;
   const slots = n > 0 ? n : PLACEHOLDER_SLOTS;
@@ -77,10 +98,12 @@ export default function CheckStrip({ checks, id, subject, legend = true, height 
   // If bars would overflow (very many checks), the viewBox grows and the SVG scales down.
   const totalWidth = Math.max(WIDTH, slots * (barWidth + GAP));
 
-  const online = checks.filter((c) => c.status === 'online').length;
+  const blockedCount = checks.filter((c) => c.blocked).length;
+  const online = checks.filter((c) => !c.blocked && c.status === 'online').length;
+  const offlineCount = checks.length - online - blockedCount;
   const summary =
     checks.length > 0
-      ? `${subject}: ${checks.length} checks in the last 24 hours, ${online} online, ${checks.length - online} unavailable.`
+      ? `${subject}: ${checks.length} checks in the last 24 hours, ${online} online, ${offlineCount} unavailable${blockedCount ? `, ${blockedCount} could not be verified` : ''}.`
       : `${subject}: no checks in the last 24 hours yet.`;
 
   // A handful of real check times under the strip (HTML, so the text never
@@ -104,6 +127,7 @@ export default function CheckStrip({ checks, id, subject, legend = true, height 
       >
         <title>{summary}</title>
         <HatchPattern id={hatchId} />
+        <BlockedPattern id={blockedId} />
         {n === 0 &&
           Array.from({ length: PLACEHOLDER_SLOTS }, (_, i) => (
             <rect
@@ -125,7 +149,13 @@ export default function CheckStrip({ checks, id, subject, legend = true, height 
               width={barWidth}
               height={height}
               rx={2}
-              fill={bar.status === 'online' ? STATUS_COLORS.online : `url(#${hatchId})`}
+              fill={
+                bar.status === 'online'
+                  ? STATUS_COLORS.online
+                  : bar.status === 'blocked'
+                    ? `url(#${blockedId})`
+                    : `url(#${hatchId})`
+              }
             >
               <title>{bar.tip}</title>
             </rect>
@@ -151,6 +181,7 @@ export default function CheckStrip({ checks, id, subject, legend = true, height 
             items={[
               { kind: 'online', label: 'Online' },
               { kind: 'offline', label: 'Unavailable' },
+              ...(blockedCount > 0 ? ([{ kind: 'blocked', label: 'Couldn’t verify (bot check)' }] as const) : []),
               { kind: 'none', label: 'No check' },
             ]}
           />

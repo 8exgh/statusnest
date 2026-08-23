@@ -1,13 +1,15 @@
 import Link from 'next/link';
 import type { PublicPage } from '@/types';
 import type { UptimeWindow } from '@/lib/public-monitors/queries';
-import { formatMs, formatUptime, relativeTime } from '@/lib/public-monitors/format';
+import { formatMs, formatUptime, relativeTime, verifyState } from '@/lib/public-monitors/format';
 import StatusPill from './StatusPill';
 
 export interface PageRow {
   page: PublicPage;
   href: string;
   uptime24h: UptimeWindow;
+  /** The newest check for this page hit a bot challenge. */
+  latestBlocked?: boolean;
 }
 
 export default function PagesTable({ rows, now }: { rows: PageRow[]; now: Date }) {
@@ -25,7 +27,7 @@ export default function PagesTable({ rows, now }: { rows: PageRow[]; now: Date }
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {rows.map(({ page, href, uptime24h }) => (
+          {rows.map(({ page, href, uptime24h, latestBlocked }) => (
             <tr key={page.id}>
               <td className="px-4 py-2">
                 <Link href={href} className="font-medium text-blue-600 hover:underline">
@@ -34,7 +36,7 @@ export default function PagesTable({ rows, now }: { rows: PageRow[]; now: Date }
                 <div className="truncate text-xs text-gray-500">{page.url}</div>
               </td>
               <td className="px-4 py-2">
-                <StatusPill status={page.status} size="sm" />
+                <StatusPill status={verifyState(page.status, latestBlocked)} size="sm" />
               </td>
               <td className="px-4 py-2 tabular-nums text-gray-700">{page.responseCode ?? '—'}</td>
               <td className="px-4 py-2 tabular-nums text-gray-700">{formatMs(page.responseTimeMs)}</td>

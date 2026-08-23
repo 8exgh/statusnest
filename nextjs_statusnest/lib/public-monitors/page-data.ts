@@ -17,12 +17,16 @@ export interface PageDetailData {
   checks24h: PublicPageCheck[];
   daily90: DailyUptime[];
   incidents30d: IncidentWithPage[];
+  /** Newest check, whatever its outcome — including one that hit a bot challenge. */
+  latest?: PublicPageCheck;
 }
 
-export interface SiteDetailData extends Omit<PageDetailData, 'page'> {
+export interface SiteDetailData extends Omit<PageDetailData, 'page' | 'latest'> {
   /** Primary page, or null when the site has no active pages. */
   primary: PublicPage | null;
   pageUptime24h: Map<string, UptimeSummary['last24h']>;
+  /** Newest check per page id, for spotting "couldn't verify". */
+  latestByPage: Map<string, PublicPageCheck>;
 }
 
 /** Deduplicated per request (generateMetadata and the page both call it). */
@@ -65,7 +69,8 @@ export const loadSiteDetail = cache((slug: string, nowMs: number): SiteDetailDat
     checks24h: primary ? queries.getPageChecks(primary.id, since24h) : [],
     daily90: primary ? queries.getDailyUptime({ pageId: primary.id }, 90, now) : [],
     incidents30d,
-    pageUptime24h
+    pageUptime24h,
+    latestByPage: queries.getLatestChecks(site.pages.map((p) => p.id))
   };
 });
 
@@ -82,7 +87,8 @@ export const loadPageDetail = cache((siteSlug: string, pageSlug: string, nowMs: 
     uptime: queries.getUptime({ pageId: page.id }, now),
     checks24h: queries.getPageChecks(page.id, new Date(nowMs - DAY_MS)),
     daily90: queries.getDailyUptime({ pageId: page.id }, 90, now),
-    incidents30d: incidentsFor(queries, site, page, new Date(nowMs - 30 * DAY_MS), now)
+    incidents30d: incidentsFor(queries, site, page, new Date(nowMs - 30 * DAY_MS), now),
+    latest: queries.getLatestChecks([page.id]).get(page.id)
   };
 });
 

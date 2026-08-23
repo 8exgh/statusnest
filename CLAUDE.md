@@ -116,14 +116,24 @@ When a domain transitions to `offline` (from `online` or `unknown` — never rep
 - Data served from read model for performance
 
 ### Public Monitors (SEO status pages)
-Ten popular, bot-tolerant sites (Google, YouTube, Wikipedia, GitHub, Discord, Steam, Netflix, Spotify, Microsoft, Apple — 3 pages each) are checked from a **real, headed Chromium on Xvfb** and published at server-rendered, indexable URLs. They are system-owned, separate from users' domain monitors, and **never routed to AlertTray**.
+**100 popular, bot-tolerant sites × 3 pages each (300 pages)** are checked from a **real, headed Chromium on Xvfb** and published at server-rendered, indexable URLs. They are system-owned, separate from users' domain monitors, and **never routed to AlertTray** (an unavailable public site is marketing data, not an alert).
 - Config: `nextjs_statusnest/lib/public-monitors/sites.ts` (`PUBLIC_SITES`) is the source of truth. `ensurePublicSites()` (`seed.ts`, run from `initializeApp`) registers new sites/pages, re-registers changed ones and deactivates removed ones — edit the file, restart, done. Aggregate ids are deterministic (`github`, `github/explore`).
+- Every site has a **`category`** (one of the 13 in `PUBLIC_CATEGORIES`, used to group `/status`) and a **`tier`**.
+- **Cadence tiers** (`schedule.ts`), triangular jitter so checks never fall into a fixed pattern:
+  - `tier: 'primary'` — 5–20 min, mode 15 (mean ~13). The 10 headline sites.
+  - `tier: 'standard'` (default) — 20–60 min, mode 40. The other 90.
+  - Why: each visit loads every page of a site in a real browser, so traffic scales with sites × frequency. Tiered ≈ 540 page loads/hour; putting all 100 on `primary` would be 1,350/hour (~10× the original 10-site load). Promote a site by adding `tier: 'primary'` to it.
 - Events live in the system-owned stream `data/users/public-monitors/write.db` (`PUBLIC_MONITORS_USER_ID`): `PublicSiteRegisteredEvent`, `PublicPageRegisteredEvent`, `PublicSite/PageDeactivatedEvent`, `PublicPageCheckedEvent` (one per page per visit), `PublicSiteCheckScheduledEvent`.
-- Read model: `public_sites` (headline status = primary page, `next_check_at`, `claimed_at`), `public_pages`, `public_page_checks` (history for the graphs, 90-day retention swept on each schedule event).
-- Cadence: after each visit the next one is scheduled with a **triangular jitter 5–20 min, mode 15** (`schedule.ts`), so a site is visited roughly every 13–15 minutes on an irregular pattern.
-- Internal API for the checker (HMAC, same key as the background processor): `GET /api/internal/public-tasks` hands out up to 3 due sites and **claims** them (`claimed_at`, 10-minute expiry) so two checkers never visit the same site; `POST /api/internal/public-check-result` records one visit `{ siteId, checkedAt, checker, results[] }` and schedules the next.
-- `browser_checker/`: visits each page of a site sequentially in a fresh browser context, `online` = HTTP 2xx/3xx and no bot challenge; 403/429/503 or challenge markers ("Just a moment", "Access Denied", captcha…) → `offline` with `blocked: true`.
-- Pages (all `force-dynamic`, SSR, inline-SVG charts, JSON-LD): `/status`, `/status/{site}`, `/status/{site}/{page}`; `sitemap.xml` / `robots.txt`; a live section on `/`. Status colours are the validated pair green `#059669` / red `#dc2626` with hatching + labels so state is never colour-alone.
+- Read model: `public_sites` (headline status = primary page, `category`, `tier`, `next_check_at`, `claimed_at`), `public_pages`, `public_page_checks` (history for the graphs, 90-day retention swept on each schedule event).
+- Internal API for the checker (HMAC, same key as the background processor): `GET /api/internal/public-tasks` hands out up to 10 due sites and **claims** them (`claimed_at`, 10-minute expiry) so two checkers never visit the same site; `POST /api/internal/public-check-result` records one visit `{ siteId, checkedAt, tier, checker, results[] }` and schedules the next from that site's tier.
+- **Vetting new sites**: `browser_checker`'s `verify-sites` tool visits a candidate list in the same real browser and reports which sites bot-block, so the list is chosen from evidence rather than guesswork. Do that before adding to `PUBLIC_SITES`.
+- `browser_checker/`: visits each page of a site sequentially in a fresh browser context, `online` = HTTP 2xx/3xx and no bot challenge; 403/429/503 or challenge markers ("Just a moment", "Access Denied", captcha…) → `blocked: true`.
+- **A bot challenge is not an outage.** Cloudflare-fronted sites (OpenAI, Canva, Perplexity, Crunchyroll…) intermittently challenge our browser while being perfectly up, so a `blocked` check is treated as *"could not verify"*, never as downtime:
+  - the projection records the check but **leaves the page's last known status alone** (only `last_checked_at` advances),
+  - `getUptime` / `getDailyUptime` / `getSitesOverview` exclude `blocked = 1` rows, and `getIncidents` skips them, so a challenge affects no uptime figure and opens no incident,
+  - the status pages render it as a distinct "couldn't verify" state, not a red outage.
+  Sites are vetted with `verify-sites` before they go in the list, but intermittent challenges are expected in production — that is what this handling is for.
+- Pages (all `force-dynamic`, SSR, inline-SVG charts, JSON-LD): `/status` (grouped by category), `/status/{site}`, `/status/{site}/{page}`; `sitemap.xml` (~405 URLs) / `robots.txt`; the 10 headline sites on `/`. Status colours are the validated pair green `#059669` / red `#dc2626` with hatching + labels so state is never colour-alone.
 - `initializeApp()` is skipped during `next build` (`NEXT_PHASE=phase-production-build`) so builds never touch `data/`.
 
 ## Environment Variables

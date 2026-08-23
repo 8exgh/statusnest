@@ -8,7 +8,10 @@ export const dynamic = 'force-dynamic';
 
 export default function Home() {
   const now = new Date();
-  const overviews = new PublicMonitorQueries().getSitesOverview(now);
+  const all = new PublicMonitorQueries().getSitesOverview(now);
+  // Only the headline sites here; the full hundred live on /status.
+  const overviews = all.filter((o) => o.site.tier === 'primary');
+  const others = all.length - overviews.length;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
@@ -53,7 +56,7 @@ export default function Home() {
                 Live status of the world’s top websites
               </h2>
               <p className="mt-2 text-gray-600">
-                Checked from a real Chromium browser every 5–20 minutes — is it down, or is it just you?
+                Checked from a real Chromium browser, not a script — is it down, or is it just you?
               </p>
             </div>
             <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -63,7 +66,7 @@ export default function Home() {
             </div>
             <div className="mt-6 text-center">
               <Link href="/status" className="font-medium text-blue-600 hover:text-blue-500">
-                See all status pages →
+                {others > 0 ? `and ${others} more — see all status pages →` : 'See all status pages →'}
               </Link>
             </div>
           </section>

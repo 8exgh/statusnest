@@ -32,10 +32,11 @@ export async function POST(request: NextRequest) {
         return createInternalResponse({ error: 'siteId and at least one result are required' });
       }
       
-      const activePages = new PublicMonitorQueries().getActivePageIds(siteId);
-      if (activePages.size === 0) {
+      const context = new PublicMonitorQueries().getSiteCheckContext(siteId);
+      if (!context) {
         return createInternalResponse({ error: 'Unknown or inactive site' });
       }
+      const activePages = context.pageIds;
       
       const results: PublicPageCheckResult[] = [];
       for (const r of rawResults) {
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
         payload: {
           siteId,
           checkedAt,
+          tier: context.tier,
           checker: {
             engine: clampText(checker?.engine, 50) ?? 'unknown',
             version: clampText(checker?.version, 50),

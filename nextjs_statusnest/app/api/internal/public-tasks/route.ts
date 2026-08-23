@@ -3,7 +3,10 @@ import { withInternalAuth, createInternalResponse } from '@/lib/infrastructure/s
 import { PublicMonitorQueries } from '@/lib/public-monitors/queries';
 import { initializeApp } from '@/lib/startup';
 
-const MAX_SITES_PER_POLL = 3;
+// With ~100 sites the checker needs roughly 3 site visits per minute; handing
+// out 10 per poll (every 30s) leaves plenty of headroom for bursts, and each
+// site is claimed so two checkers never collide.
+const MAX_SITES_PER_POLL = 10;
 
 /**
  * Sites whose jittered check time has come, for the browser checker. Each

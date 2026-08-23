@@ -184,6 +184,10 @@ export interface PublicSite {
   name: string;
   url: string;
   description: string;
+  /** Category slug used to group the status index (see lib/public-monitors/sites.ts). */
+  category: string;
+  /** Check cadence tier: 'primary' (5–20 min) or 'standard' (20–60 min). */
+  tier: string;
   position: number;
   active: boolean;
   /** Status of the site's primary page (position 0). */
@@ -238,6 +242,8 @@ export interface PublicSiteRegisteredEvent {
   name: string;
   url: string;
   description: string;
+  category: string;
+  tier: string;
   position: number;
   timestamp: Date;
 }

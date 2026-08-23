@@ -1,7 +1,7 @@
 import { Command, Event, PublicPageCheckResult } from '@/types';
 import { EventStore, assert } from './event-store';
 import { v4 as uuidv4 } from 'uuid';
-import { scheduleNextPublicCheck } from '@/lib/public-monitors/schedule';
+import { asCheckTier, scheduleNextPublicCheck } from '@/lib/public-monitors/schedule';
 
 export class CommandBus {
   private eventStore: EventStore;
@@ -308,12 +308,13 @@ export class CommandBus {
   // ---------------------------------------------------------------------
   
   private handleRegisterPublicSite(command: Command): Event[] {
-    const { slug, name, url, description = '', position = 0, pages = [] } = command.payload;
+    const { slug, name, url, description = '', category = 'other', position = 0, pages = [] } = command.payload;
     assert(slug, "Site slug is required");
     assert(name, "Site name is required");
     assert(url, "Site URL is required");
     
     const siteId = command.aggregateId || slug;
+    const tier = asCheckTier(command.payload.tier);
     const now = new Date();
     
     const events: Event[] = [
@@ -322,7 +323,7 @@ export class CommandBus {
         aggregateType: 'PublicSite',
         eventType: 'PublicSiteRegisteredEvent',
         eventVersion: 1,
-        eventData: { siteId, slug, name, url, description, position, timestamp: now },
+        eventData: { siteId, slug, name, url, description, category, tier, position, timestamp: now },
         createdAt: now,
         sequenceNumber: 0
       }
@@ -452,7 +453,7 @@ export class CommandBus {
       aggregateType: 'PublicSite',
       eventType: 'PublicSiteCheckScheduledEvent',
       eventVersion: 1,
-      eventData: { siteId, scheduledFor: scheduleNextPublicCheck(now), timestamp: now },
+      eventData: { siteId, scheduledFor: scheduleNextPublicCheck(now, asCheckTier(command.payload.tier)), timestamp: now },
       createdAt: now,
       sequenceNumber: 0
     });

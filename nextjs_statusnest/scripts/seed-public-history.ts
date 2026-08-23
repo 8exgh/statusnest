@@ -6,9 +6,14 @@
  *
  * Goes through the real command path (RecordPublicSiteCheck), so the running
  * app's projection engine turns the events into read-model rows a few seconds
- * later. Refuses to run if history already exists. Density is tiered (every
- * ~3 h for days 8–90, hourly for days 2–7, every ~13 min for the last 24 h) to
- * keep the event count around 10k.
+ * later. Refuses to run if history already exists.
+ *
+ * Density is deliberately coarser than production and follows the site's check
+ * tier, so the seeded picture matches what the real checker would record
+ * (a `standard` site is visited every 20–60 min, not every 13). At 100 sites
+ * the full-fidelity version would be ~275k checks, which takes far too long to
+ * write and project; this keeps it near 70k while still filling the 90-day,
+ * 7-day and 24-hour views.
  */
 import { CommandBus } from '@/lib/cqrs/command-bus';
 import { PublicMonitorQueries } from '@/lib/public-monitors/queries';
@@ -40,6 +45,13 @@ interface Outage {
   kind: 'error' | 'timeout' | 'blocked';
 }
 
+/** Midnight UTC at the start of the day containing `ms`. */
+function utcDayStart(ms: number): number {
+  const d = new Date(ms);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 async function main(): Promise<void> {
   if (!process.env.DATABASE_PATH) {
     console.warn('DATABASE_PATH is not set — seeding ./data');
@@ -58,6 +70,13 @@ async function main(): Promise<void> {
     { siteSlug: 'steam', start: now - 20 * DAY - 15 * HOUR, end: now - 20 * DAY - 13 * HOUR, kind: 'timeout' },
     { siteSlug: 'github', pageSlug: 'docs', start: now - 10 * DAY - 12 * HOUR, end: now - 10 * DAY - 1 * HOUR, kind: 'blocked' },
     { siteSlug: 'netflix', start: now - 5 * HOUR - 20 * MIN, end: now - 4 * HOUR - 55 * MIN, kind: 'error' },
+    // Bot-challenge scenarios: these must never read as outages.
+    // 1. Ongoing — the site's *latest* check is blocked (what OpenAI actually does to us).
+    { siteSlug: 'openai', start: now - 50 * MIN, end: now + HOUR, kind: 'blocked' },
+    // 2. A day with a mix of real checks and blocked ones, on one page only.
+    { siteSlug: 'canva', pageSlug: 'pricing', start: now - 2 * DAY - 6 * HOUR, end: now - 2 * DAY + 2 * HOUR, kind: 'blocked' },
+    // 3. A whole UTC day where every check was blocked → no uptime either way.
+    { siteSlug: 'perplexity', start: utcDayStart(now - 15 * DAY), end: utcDayStart(now - 15 * DAY) + DAY, kind: 'blocked' },
   ];
 
   const commandBus = new CommandBus();
@@ -66,14 +85,19 @@ async function main(): Promise<void> {
   for (const [siteIndex, site] of PUBLIC_SITES.entries()) {
     const rand = mulberry32(1000 + siteIndex);
     const siteId = publicSiteId(site.slug);
-    const baseMs = 250 + siteIndex * 60;
+    // Vary by site but stay in a realistic band; scaling by index made the
+    // hundredth site look like a 6-second page.
+    const baseMs = 220 + (siteIndex % 9) * 55;
     const times: number[] = [];
 
+    // Recent history is dense enough for the 24-hour strip; older history only
+    // has to support a daily uptime percentage.
+    const recentInterval = (site.tier ?? 'standard') === 'primary' ? 15 * MIN : 40 * MIN;
     let t = now - 90 * DAY;
     while (t < now) {
       times.push(t);
       const age = now - t;
-      const interval = age > 7 * DAY ? 180 * MIN : age > DAY ? 60 * MIN : 13 * MIN;
+      const interval = age > 7 * DAY ? 12 * HOUR : age > DAY ? 4 * HOUR : recentInterval;
       t += interval + (rand() - 0.5) * interval * 0.3;
     }
 
@@ -114,7 +138,9 @@ async function main(): Promise<void> {
       });
       visits += 1;
     }
-    console.log(`${site.slug}: ${times.length} visits seeded`);
+    if (siteIndex % 10 === 0 || siteIndex === PUBLIC_SITES.length - 1) {
+      console.log(`[${siteIndex + 1}/${PUBLIC_SITES.length}] ${site.slug}: ${times.length} visits (${visits} total so far)`);
+    }
   }
 
   console.log(`Done: ${visits} site visits (${visits * 3} page checks). The projection engine will catch up within a few seconds.`);

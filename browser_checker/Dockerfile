@@ -31,3 +31,4 @@ USER pwuser
 # crashed browser subprocesses get reaped.
 ENV DISPLAY=:99 XVFB_SCREEN=1366x768x24
 ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["node", "dist/index.js"]

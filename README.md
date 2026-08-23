@@ -43,13 +43,27 @@ npm run dev
 
 ## Public Status Pages (SEO)
 
-`/status` publishes live, server-rendered status pages for ten popular websites — Google, YouTube, Wikipedia,
-GitHub, Discord, Steam, Netflix, Spotify, Microsoft and Apple — three pages each, e.g. `/status/github` and
-`/status/github/explore`. Each site is loaded in a **real, headed Chromium browser on a virtual display**
-(the `browser_checker` container) roughly every 15 minutes on a randomised 5–20 minute schedule, and every page
-shows green/red check history for the last 24 hours, 90-day daily uptime, response times and recent incidents.
+`/status` publishes live, server-rendered status pages for **100 popular websites** — Google, YouTube, Reddit,
+GitHub, Discord, Steam, Netflix, Roblox, OpenAI and 91 more — three pages each, e.g. `/status/github` and
+`/status/github/explore`. Sites are grouped into 13 categories (search, social, video, music, gaming, AI,
+developer, cloud, tech, news, shopping, finance, learning).
+
+Each site is loaded in a **real, headed Chromium browser on a virtual display** (the `browser_checker`
+container), and every page shows green/red check history for the last 24 hours, 90-day daily uptime, response
+times and recent incidents. Checks are jittered so they never fall into a fixed pattern:
+
+| Tier | Cadence | Sites |
+|---|---|---|
+| `primary` | every 5–20 minutes (mode 15) | the 10 headline sites |
+| `standard` | every 20–60 minutes (mode 40) | the other 90 |
+
+Each visit loads every page of a site in a real browser, so traffic scales with sites × frequency — the tiers
+keep 100 sites at about 540 page loads an hour. Promote any site by adding `tier: 'primary'` to it in
+`nextjs_statusnest/lib/public-monitors/sites.ts`, which is the source of truth for the whole list.
+
 These monitors are independent of user accounts and never trigger AlertTray; they exist for the status pages
-(and the search traffic they attract). The list lives in `nextjs_statusnest/lib/public-monitors/sites.ts`.
+(and the search traffic they attract). Before adding a site, vet it with the `verify-sites` tool in
+`browser_checker` — it visits candidates in the same real browser and reports which ones serve a bot challenge.
 
 ```bash
 cd browser_checker

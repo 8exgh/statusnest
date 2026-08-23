@@ -1,6 +1,6 @@
 import { STATUS_COLORS } from './palette';
 
-type SwatchKind = 'online' | 'offline' | 'none' | 'series';
+type SwatchKind = 'online' | 'offline' | 'blocked' | 'none' | 'series';
 
 function Swatch({ kind, id }: { kind: SwatchKind; id: string }) {
   const hatchId = `${id}-legend-hatch`;
@@ -14,6 +14,14 @@ function Swatch({ kind, id }: { kind: SwatchKind; id: string }) {
           </pattern>
         </defs>
       )}
+      {kind === 'blocked' && (
+        <defs>
+          <pattern id={hatchId} patternUnits="userSpaceOnUse" width="5" height="5">
+            <rect width="5" height="5" fill={STATUS_COLORS.blocked} />
+            <circle cx="2.5" cy="2.5" r="1.15" fill="#ffffff" fillOpacity="0.75" />
+          </pattern>
+        </defs>
+      )}
       {kind === 'series' ? (
         <line x1="1" y1="7" x2="13" y2="7" stroke={STATUS_COLORS.series} strokeWidth="2" strokeLinecap="round" />
       ) : (
@@ -23,7 +31,13 @@ function Swatch({ kind, id }: { kind: SwatchKind; id: string }) {
           width="12"
           height="12"
           rx="2"
-          fill={kind === 'online' ? STATUS_COLORS.online : kind === 'offline' ? `url(#${hatchId})` : STATUS_COLORS.none}
+          fill={
+            kind === 'online'
+              ? STATUS_COLORS.online
+              : kind === 'offline' || kind === 'blocked'
+                ? `url(#${hatchId})`
+                : STATUS_COLORS.none
+          }
         />
       )}
     </svg>

@@ -1,16 +1,18 @@
-import type { PublicMonitorStatus } from '@/types';
+import type { VerifyState } from '@/lib/public-monitors/format';
 import { STATUS_COLORS } from './palette';
 
 interface StatusPillProps {
-  status: PublicMonitorStatus;
-  /** Override the label (defaults to Online / Unavailable / Not checked yet). */
+  status: VerifyState;
+  /** Override the label (defaults to Online / Unavailable / Couldn’t verify / Not checked yet). */
   label?: string;
   size?: 'sm' | 'md' | 'lg';
 }
 
-const STYLES: Record<PublicMonitorStatus, { bg: string; border: string; icon: string; color: string; label: string }> = {
+const STYLES: Record<VerifyState, { bg: string; border: string; icon: string; color: string; label: string }> = {
   online: { bg: 'bg-emerald-50', border: 'border-emerald-200', icon: '✓', color: STATUS_COLORS.online, label: 'Online' },
   offline: { bg: 'bg-red-50', border: 'border-red-200', icon: '✕', color: STATUS_COLORS.offline, label: 'Unavailable' },
+  // Deliberately not red or amber: a bot challenge is not evidence of an outage.
+  blocked: { bg: 'bg-slate-100', border: 'border-slate-300', icon: '?', color: STATUS_COLORS.blocked, label: 'Couldn’t verify' },
   unknown: { bg: 'bg-gray-100', border: 'border-gray-200', icon: '○', color: STATUS_COLORS.text, label: 'Not checked yet' },
 };
 

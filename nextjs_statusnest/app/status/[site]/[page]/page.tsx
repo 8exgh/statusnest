@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { loadPageDetail, loadSite, requestNow } from '@/lib/public-monitors/page-data';
-import { formatMs, formatUptime, relativeTime, statusWord, subjectName } from '@/lib/public-monitors/format';
+import { blockedExplanation, cadenceFor, formatMs, formatUptime, relativeTime, statusWord, subjectName, verifyState } from '@/lib/public-monitors/format';
 import { absoluteUrl } from '@/lib/site-url';
 import StatusHero from '@/components/status/StatusHero';
 import UptimeTiles from '@/components/status/UptimeTiles';
@@ -29,9 +29,14 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const data = loadPageDetail(siteSlug, pageSlug, now.getTime());
   const name = subjectName(site.name, page.name);
   const title = `Is ${name} Down? Live Status & Uptime — StatusNest`;
-  const state = page.status === 'unknown' ? 'has not been checked yet' : `is ${statusWord(page.status)} as of our last check ${relativeTime(page.lastCheckedAt, now)}`;
+  const blocked = Boolean(data?.latest?.blocked);
+  const state = blocked
+    ? `showed a bot check at our last visit ${relativeTime(page.lastCheckedAt, now)}, so we could not verify it — it was last seen ${statusWord(page.status)}`
+    : page.status === 'unknown'
+      ? 'has not been checked yet'
+      : `is ${statusWord(page.status)} as of our last check ${relativeTime(page.lastCheckedAt, now)}`;
   const windows = data && data.uptime.last24h.uptime !== null ? ` 24-hour uptime ${formatUptime(data.uptime.last24h.uptime)}, 30-day uptime ${formatUptime(data.uptime.last30d.uptime)}.` : '';
-  const description = `${name} (${page.url}) ${state}.${windows} Checked from a real Chromium browser every 5–20 minutes by StatusNest.`;
+  const description = `${name} (${page.url}) ${state}.${windows} Checked from a real Chromium browser ${cadenceFor(site.tier)} by StatusNest.`;
   const url = absoluteUrl(`/status/${site.slug}/${page.slug}`);
   return {
     title,
@@ -47,7 +52,9 @@ export default async function PageStatusPage({ params }: Params) {
   const now = requestNow();
   const data = loadPageDetail(siteSlug, pageSlug, now.getTime());
   if (!data) notFound();
-  const { site, page, uptime, checks24h, daily90, incidents30d } = data;
+  const { site, page, uptime, checks24h, daily90, incidents30d, latest } = data;
+  const latestBlocked = Boolean(latest?.blocked);
+  const state = verifyState(page.status, latestBlocked);
   const name = subjectName(site.name, page.name);
   const url = absoluteUrl(`/status/${site.slug}/${page.slug}`);
   const siblings = site.pages.filter((p) => p.id !== page.id);
@@ -55,14 +62,21 @@ export default async function PageStatusPage({ params }: Params) {
   const faq: FaqItem[] = [
     {
       question: `Is ${name} down right now?`,
-      answer:
+      answer: latestBlocked
+        ? `We could not verify ${name} at our last visit ${relativeTime(page.lastCheckedAt, now)}: it served a bot check to our browser instead of the page. That usually means it is up but refusing automated visitors, so we do not record it as an outage. The last check we could complete found it ${statusWord(page.status)}.`
+        :
         page.status === 'unknown'
           ? `${name} has not been checked yet; the first check runs within a few minutes of it being added.`
           : `As of our last check ${relativeTime(page.lastCheckedAt, now)}, ${page.url} was ${statusWord(page.status)}${page.responseCode ? ` (HTTP ${page.responseCode}, loaded in ${formatMs(page.responseTimeMs)})` : ''}. We load it in a real Chromium browser rather than a script.`,
     },
     {
       question: `How often is ${name} checked?`,
-      answer: `Roughly every 15 minutes, together with the other ${site.name} pages we track. Each visit is scheduled at random between 5 and 20 minutes after the previous one.`,
+      answer: `${cadenceFor(site.tier).replace(/^every/, 'Every')}, together with the other ${site.name} pages we track. Each visit is scheduled at random inside that window.`,
+    },
+    {
+      question: 'What does "couldn’t verify" mean?',
+      answer:
+        'Some sites show a bot check (a "Just a moment…" or "Access denied" page) to automated browsers instead of the real page. We record that as "couldn’t verify" rather than an outage — it usually means the site is up and refusing automated visitors — and it counts toward no uptime figure.',
     },
     {
       question: 'What does "unavailable" mean?',
@@ -117,10 +131,11 @@ export default async function PageStatusPage({ params }: Params) {
         crumbs={[{ name: 'Status', href: '/status' }, { name: site.name, href: `/status/${site.slug}` }, { name: page.name }]}
         heading={`Is ${name} down?`}
         subjectName={name}
-        status={page.status}
+        status={state}
         lastCheckedAt={page.lastCheckedAt}
         now={now}
-        detail={page.status !== 'unknown' ? <>{page.responseCode ? `HTTP ${page.responseCode}` : 'no response'} · loaded in {formatMs(page.responseTimeMs)}</> : undefined}
+        detail={!latestBlocked && page.status !== 'unknown' ? <>{page.responseCode ? `HTTP ${page.responseCode}` : 'no response'} · loaded in {formatMs(page.responseTimeMs)}</> : undefined}
+        note={latestBlocked ? blockedExplanation(name, page.status, page.lastOnlineAt ?? page.lastCheckedAt, now) : undefined}
         externalUrl={page.url}
       />
 
@@ -170,7 +185,7 @@ export default async function PageStatusPage({ params }: Params) {
       )}
 
       <Section title={`How StatusNest checks ${name}`}>
-        <Methodology siteName={site.name} pages={[page]} siteSlug={site.slug} />
+        <Methodology siteName={site.name} pages={[page]} siteSlug={site.slug} tier={site.tier} />
       </Section>
 
       <Section title="Frequently asked questions">

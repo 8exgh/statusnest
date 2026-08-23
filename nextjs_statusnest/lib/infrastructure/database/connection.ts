@@ -141,6 +141,8 @@ export function getReadModelDatabase(): Database.Database {
       name TEXT NOT NULL,
       url TEXT NOT NULL,
       description TEXT,
+      category TEXT,
+      tier TEXT,
       position INTEGER DEFAULT 0,
       active INTEGER DEFAULT 1,
       status TEXT CHECK(status IN ('online', 'offline', 'unknown')) DEFAULT 'unknown',
@@ -187,6 +189,10 @@ export function getReadModelDatabase(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_public_page_checks_page ON public_page_checks(page_id, checked_at);
     CREATE INDEX IF NOT EXISTS idx_public_page_checks_site ON public_page_checks(site_id, checked_at);
   `);
+  
+  // Migrations for read models created before categories / check tiers existed.
+  ensureColumn(db, 'public_sites', 'category', 'TEXT');
+  ensureColumn(db, 'public_sites', 'tier', 'TEXT');
   
   return db;
 }
