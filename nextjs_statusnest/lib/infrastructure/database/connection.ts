@@ -128,6 +128,25 @@ export function getReadModelDatabase(): Database.Database {
     );
   `);
   
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      recipient TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pending', 'processing', 'sent')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      attempt_id TEXT,
+      next_attempt_at TEXT NOT NULL,
+      lease_until TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      sent_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_notifications_due ON email_notifications(status, next_attempt_at, lease_until);
+  `);
+
   // Migrations for read models created before offline alerts existed.
   ensureColumn(db, 'domain_monitors', 'last_alert_at', 'TIMESTAMP');
   ensureColumn(db, 'domain_monitors', 'last_alert_channels', 'JSON');

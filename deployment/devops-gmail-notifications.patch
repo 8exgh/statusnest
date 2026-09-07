@@ -1,0 +1,35 @@
+--- a/.github/workflows/deploy-statusnest_background_processor.yml
++++ b/.github/workflows/deploy-statusnest_background_processor.yml
+@@ -28,17 +28,32 @@
+         run: |
+           docker pull ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
+ 
++      - name: Validate email configuration
++        env:
++          GMAIL_USER: ${{ secrets.GMAIL_8EXAMPLES_USER }}
++          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_8EXAMPLES_APP_PASSWORD }}
++        run: |
++          if [ -z "$GMAIL_USER" ] || [ -z "$GMAIL_APP_PASSWORD" ]; then
++            echo "::error::GMAIL_8EXAMPLES_USER and GMAIL_8EXAMPLES_APP_PASSWORD must be available to this workflow"
++            exit 1
++          fi
++
+       - name: Stop and remove existing container
+         run: |
+           docker stop ${{ env.CONTAINER_NAME }} || true
+           docker rm ${{ env.CONTAINER_NAME }} || true
+ 
+       - name: Run new container
++        env:
++          GMAIL_USER: ${{ secrets.GMAIL_8EXAMPLES_USER }}
++          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_8EXAMPLES_APP_PASSWORD }}
+         run: |
+           docker run -d \
+             --name ${{ env.CONTAINER_NAME }} \
+             --restart unless-stopped \
+             -e NODE_ENV=production \
++            -e GMAIL_USER \
++            -e GMAIL_APP_PASSWORD \
+             -e STATUSNEST_API_URL=http://192.168.4.56:3009 \
+             -e API_KEY=${{ secrets.STATUSNEST_API_KEY }} \
+             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest

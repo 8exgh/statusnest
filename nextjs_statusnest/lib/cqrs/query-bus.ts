@@ -1,7 +1,23 @@
 import { DomainMonitor, Task } from '@/types';
 import { getReadModelDatabase } from '@/lib/infrastructure/database/connection';
+import type { EmailTask } from '@/lib/email/notifications';
 
 export class QueryBus {
+  async getPendingEmails(): Promise<EmailTask[]> {
+    const db = getReadModelDatabase();
+    try {
+      // Queries are read-only; the claim command checks the authoritative stream.
+      return db.prepare(`
+        SELECT id AS notificationId, user_id AS userId, recipient AS "to", subject, body AS text
+        FROM email_notifications
+        WHERE status != 'sent' AND next_attempt_at <= ? AND (lease_until IS NULL OR lease_until <= ?)
+        ORDER BY next_attempt_at, created_at, id LIMIT 10
+      `).all(new Date().toISOString(), new Date().toISOString()) as EmailTask[];
+    } finally {
+      db.close();
+    }
+  }
+
   async getUserDomains(userId: string): Promise<DomainMonitor[]> {
     const db = getReadModelDatabase();
     

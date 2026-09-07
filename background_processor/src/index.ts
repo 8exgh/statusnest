@@ -1,6 +1,8 @@
 import * as dotenv from 'dotenv';
 import { ApiClient } from './api-client';
 import { checkDomainStatus } from './status-checker';
+import { EmailProcessor } from './email-processor';
+import { createEmailSender } from './email-sender';
 
 dotenv.config();
 
@@ -23,9 +25,19 @@ class BackgroundProcessor {
     console.log(`API URL: ${process.env.STATUSNEST_API_URL || 'http://localhost:3000'}`);
     console.log(`Check interval: ${this.checkInterval}ms`);
     
+    const sender = createEmailSender();
+    if (!sender) console.warn('Email delivery disabled: set GMAIL_USER and GMAIL_APP_PASSWORD. Email tasks remain queued.');
+    const emailProcessor = sender ? new EmailProcessor(this.apiClient, sender) : null;
+    await Promise.all([
+      this.runLoop(() => this.processPendingChecks()),
+      ...(emailProcessor ? [this.runLoop(() => emailProcessor.process())] : [])
+    ]);
+  }
+
+  private async runLoop(processTasks: () => Promise<void>): Promise<void> {
     while (true) {
       try {
-        await this.processPendingChecks();
+        await processTasks();
       } catch (error) {
         console.error('Error in processing loop:', error);
       }

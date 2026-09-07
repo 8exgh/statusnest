@@ -9,6 +9,39 @@ export function assert(condition: any, message: string): asserts condition {
 }
 
 export class EventStore {
+  /** Serialize decisions and appends so competing workers cannot claim the same email. */
+  updateAggregate(userId: string, aggregateId: string, decide: (history: Event[]) => Event[]): void {
+    const db = getUserWriteDatabase(userId);
+    try {
+      db.transaction(() => {
+        const rows = db.prepare('SELECT * FROM events WHERE aggregate_id = ? ORDER BY sequence_number').all(aggregateId) as any[];
+        const history: Event[] = rows.map(row => ({
+          id: row.id,
+          aggregateId: row.aggregate_id,
+          aggregateType: row.aggregate_type,
+          eventType: row.event_type,
+          eventVersion: row.event_version,
+          eventData: JSON.parse(row.event_data),
+          createdAt: new Date(row.created_at),
+          sequenceNumber: row.sequence_number
+        }));
+        const events = decide(history);
+        const { sequence } = db.prepare('SELECT COALESCE(MAX(sequence_number), 0) AS sequence FROM events').get() as { sequence: number };
+        const insert = db.prepare(`INSERT INTO events
+          (aggregate_id, aggregate_type, event_type, event_version, event_data, metadata, created_at, sequence_number)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+        events.forEach((event, index) => {
+          assert(event.aggregateId === aggregateId, 'Event must belong to the aggregate');
+          insert.run(event.aggregateId, event.aggregateType, event.eventType, event.eventVersion,
+            JSON.stringify(event.eventData), event.metadata ? JSON.stringify(event.metadata) : null,
+            event.createdAt.toISOString(), sequence + index + 1);
+        });
+      }).immediate();
+    } finally {
+      db.close();
+    }
+  }
+
   async appendEvents(userId: string, events: Event[]): Promise<void> {
     assert(userId, "User ID is required");
     assert(events.length > 0, "At least one event required");

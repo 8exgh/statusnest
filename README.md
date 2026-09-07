@@ -33,6 +33,7 @@ npm run dev
 ## Features
 
 - User registration and authentication
+- Signup and website-added email notifications to `sbennett@8examples.com`
 - Domain monitoring with 5-minute interval checks
 - Real-time status updates (1-second polling)
 - **Offline alerts**: a phone call + SMS (or email) the moment a domain goes offline (via AlertTray)
@@ -92,6 +93,51 @@ Setup:
 
 Without `ALERTTRAY_API_KEY` nothing is sent; the attempt is logged and shown on the dashboard as a failed alert.
 
+## Signup and website-added emails
+
+New signups and websites added to an account send an email to **sbennett@8examples.com**, including
+the account email, account ID, UTC time, and (for a website) its domain and ID.
+
+The registration command appends `EmailNotificationRequestedEvent` in the same event-store transaction
+as `UserRegisteredEvent` or `DomainRegisteredEvent`. The projection creates an `email_notifications`
+read-model task. The background processor polls `GET /api/internal/email-tasks` every five seconds,
+then issues a claim command through the HMAC-authenticated `POST /api/internal/email-tasks` before
+sending via Gmail. Domain checks and email processing run in separate polling loops.
+
+Claims and delivery outcomes are events in the user's write database. Claims expire after five minutes;
+failed sends retry after one minute, doubling up to one hour. A successful send is never selected again.
+Queries are read-only, and claim commands validate the current event stream transactionally so a stale
+query or another worker cannot claim active or completed work. Rebuilding projections restores delivery
+state and does not create emails for registrations made before this feature was installed.
+
+The worker retains unacknowledged delivery results in memory and retries recording them without sending
+again. Delivery is **at least once**: a worker crash after Gmail accepts a message but before the result
+is recorded can produce a duplicate. Each notification uses a stable Message-ID, but SMTP does not
+guarantee deduplication.
+
+Configure `GMAIL_USER` and `GMAIL_APP_PASSWORD` on the background processor. Without both, it keeps
+checking domains and leaves email tasks queued. The sender uses Gmail's TLS SMTP preset and an app
+password ([Nodemailer Gmail guide](https://nodemailer.com/guides/using-gmail)).
+
+Production runtime settings live in the **devops** repository. Apply
+[`deployment/devops-gmail-notifications.patch`](deployment/devops-gmail-notifications.patch) there:
+
+```bash
+cd ../devops
+git apply ../statusnest/deployment/devops-gmail-notifications.patch
+```
+
+The patch passes the existing `GMAIL_8EXAMPLES_USER` and `GMAIL_8EXAMPLES_APP_PASSWORD` GitHub secrets
+into the worker container without baking credentials into its image. Deploy the updated Next.js app
+and background processor along with that workflow change to activate delivery.
+
+Email tests use temporary databases and mock SMTP; they do not send real messages:
+
+```bash
+cd nextjs_statusnest && npm test
+cd ../background_processor && npm test
+```
+
 ## Testing the System
 
 1. Navigate to http://localhost:3000
@@ -113,6 +159,8 @@ Both applications use `.env` files with default development values. For producti
 ### background_processor/.env
 - `API_KEY`: Must match `BACKGROUND_PROCESSOR_API_KEY` above
 - `STATUSNEST_API_URL`: URL of the Next.js application
+- `GMAIL_USER`: Google account that sends signup and website-added emails
+- `GMAIL_APP_PASSWORD`: App password for that account
 
 ## Database Structure
 

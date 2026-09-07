@@ -2,6 +2,8 @@ import { Command, Event, PublicPageCheckResult } from '@/types';
 import { EventStore, assert } from './event-store';
 import { v4 as uuidv4 } from 'uuid';
 import { asCheckTier, scheduleNextPublicCheck } from '@/lib/public-monitors/schedule';
+import { decideEmailCommand, EMAIL_COMMANDS, requestEmail } from '@/lib/email/notifications';
+import { getSystemDatabase } from '@/lib/infrastructure/database/connection';
 
 export class CommandBus {
   private eventStore: EventStore;
@@ -13,6 +15,11 @@ export class CommandBus {
   async dispatch(command: Command): Promise<void> {
     assert(command.userId, "User ID is required");
     assert(command.type, "Command type is required");
+    if (EMAIL_COMMANDS.has(command.type)) {
+      assert(command.aggregateId, 'Notification ID is required');
+      this.eventStore.updateAggregate(command.userId, command.aggregateId, history => decideEmailCommand(command, history));
+      return;
+    }
     
     const events = await this.handleCommand(command);
     
@@ -23,6 +30,8 @@ export class CommandBus {
   
   private async handleCommand(command: Command): Promise<Event[]> {
     switch (command.type) {
+      case 'RecordUserRegistration':
+        return this.handleRecordUserRegistration(command);
       case 'RegisterDomain':
         return this.handleRegisterDomain(command);
       case 'CheckDomainStatus':
@@ -54,12 +63,35 @@ export class CommandBus {
     }
   }
   
+  private handleRecordUserRegistration(command: Command): Event[] {
+    const { email, registeredAt } = command.payload;
+    assert(email, 'Account email is required');
+    const now = registeredAt ? new Date(registeredAt) : new Date();
+    return [{
+      aggregateId: command.userId,
+      aggregateType: 'User',
+      eventType: 'UserRegisteredEvent',
+      eventVersion: 1,
+      eventData: { userId: command.userId, email, timestamp: now },
+      createdAt: now,
+      sequenceNumber: 0
+    }, requestEmail(command.userId, email, now)];
+  }
+
   private handleRegisterDomain(command: Command): Event[] {
     const { domain } = command.payload;
     assert(domain, "Domain is required");
     
     const domainId = command.aggregateId || uuidv4();
     const now = new Date();
+    const systemDb = getSystemDatabase();
+    let account: { email: string } | undefined;
+    try {
+      account = systemDb.prepare('SELECT email FROM users WHERE id = ?').get(command.userId) as { email: string } | undefined;
+    } finally {
+      systemDb.close();
+    }
+    assert(account, 'Account must exist to register a website');
     
     return [
       {
@@ -89,7 +121,8 @@ export class CommandBus {
         },
         createdAt: now,
         sequenceNumber: 0
-      }
+      },
+      requestEmail(command.userId, account.email, now, { domainId, domain })
     ];
   }
   

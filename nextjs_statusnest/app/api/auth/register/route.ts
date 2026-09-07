@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createUser, createSession, findUserByEmail } from '@/lib/infrastructure/security/auth';
-import { EventStore } from '@/lib/cqrs/event-store';
-import { getUserWriteDatabase } from '@/lib/infrastructure/database/connection';
+import { CommandBus } from '@/lib/cqrs/command-bus';
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,22 +30,12 @@ export async function POST(request: NextRequest) {
     
     const user = await createUser(email, password);
     
-    getUserWriteDatabase(user.id).close();
-    
-    const eventStore = new EventStore();
-    await eventStore.appendEvents(user.id, [{
+    await new CommandBus().dispatch({
+      userId: user.id,
       aggregateId: user.id,
-      aggregateType: 'User',
-      eventType: 'UserRegisteredEvent',
-      eventVersion: 1,
-      eventData: {
-        userId: user.id,
-        email: user.email,
-        timestamp: user.createdAt
-      },
-      createdAt: user.createdAt,
-      sequenceNumber: 0
-    }]);
+      type: 'RecordUserRegistration',
+      payload: { email: user.email, registeredAt: user.createdAt }
+    });
     
     const { session, token } = await createSession(user.id);
     

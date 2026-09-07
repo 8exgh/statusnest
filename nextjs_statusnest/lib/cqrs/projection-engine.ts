@@ -2,6 +2,7 @@ import { Event, DomainMonitor, ProjectionCheckpoint } from '@/types';
 import { EventStore } from './event-store';
 import { getReadModelDatabase, getAllUserIds } from '@/lib/infrastructure/database/connection';
 import { CHECK_RETENTION_DAYS } from '@/lib/public-monitors/schedule';
+import { projectEmailEvent } from '@/lib/email/notifications';
 
 export class ProjectionEngine {
   private checkInterval = 1000;
@@ -49,41 +50,48 @@ export class ProjectionEngine {
   
   private async processUserEvents(userId: string): Promise<void> {
     const db = getReadModelDatabase();
+    try {
+      const checkpointRow = db.prepare(
+        'SELECT last_processed_sequence FROM projection_checkpoints WHERE user_id = ?'
+      ).get(userId) as { last_processed_sequence: number } | undefined;
     
-    const checkpointRow = db.prepare(
-      'SELECT last_processed_sequence FROM projection_checkpoints WHERE user_id = ?'
-    ).get(userId) as { last_processed_sequence: number } | undefined;
+      const lastProcessedSequence = checkpointRow?.last_processed_sequence || 0;
     
-    const lastProcessedSequence = checkpointRow?.last_processed_sequence || 0;
+      const events = await this.eventStore.getEvents(userId, lastProcessedSequence);
     
-    const events = await this.eventStore.getEvents(userId, lastProcessedSequence);
-    
-    if (events.length === 0) {
-      db.close();
-      return;
-    }
-    
-    const updateCheckpoint = db.prepare(`
-      INSERT INTO projection_checkpoints (user_id, last_processed_sequence, last_processed_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(user_id) DO UPDATE SET
-        last_processed_sequence = excluded.last_processed_sequence,
-        last_processed_at = excluded.last_processed_at
-    `);
-    
-    db.transaction(() => {
-      for (const event of events) {
-        this.projectEvent(db, event, userId);
+      if (events.length === 0) {
+        return;
       }
-      
-      const maxSequence = Math.max(...events.map(e => e.sequenceNumber));
-      updateCheckpoint.run(userId, maxSequence, new Date().toISOString());
-    })();
     
-    db.close();
+      const updateCheckpoint = db.prepare(`
+        INSERT INTO projection_checkpoints (user_id, last_processed_sequence, last_processed_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          last_processed_sequence = excluded.last_processed_sequence,
+          last_processed_at = excluded.last_processed_at
+      `);
+    
+      db.transaction(() => {
+        // Another projection pass may have advanced while getEvents was awaited.
+        // Recheck under the transaction before applying side-effect-free projections.
+        const current = db.prepare('SELECT last_processed_sequence FROM projection_checkpoints WHERE user_id = ?')
+          .get(userId) as { last_processed_sequence: number } | undefined;
+        const pending = events.filter(event => event.sequenceNumber > (current?.last_processed_sequence ?? 0));
+        if (pending.length === 0) return;
+        for (const event of pending) {
+          this.projectEvent(db, event, userId);
+        }
+      
+        const maxSequence = pending[pending.length - 1].sequenceNumber;
+        updateCheckpoint.run(userId, maxSequence, new Date().toISOString());
+      }).immediate();
+    } finally {
+      db.close();
+    }
   }
   
   private projectEvent(db: any, event: Event, userId: string): void {
+    projectEmailEvent(db, event, userId);
     switch (event.eventType) {
       case 'DomainRegisteredEvent':
         this.projectDomainRegistered(db, event, userId);
