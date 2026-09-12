@@ -16,6 +16,12 @@ export default function SiteFooter() {
           <a href="https://swiftgrid.net" className="font-medium text-gray-900 hover:underline">
             SwiftGrid.net
           </a>
+          {' · '}
+          Utilizes{' '}
+          <a href="https://alerttray.com" className="font-medium text-gray-900 hover:underline">
+            AlertTray.com
+          </a>{' '}
+          for notifications.
         </p>
         <nav aria-label="Footer" className="flex flex-wrap gap-x-5 gap-y-1">
           <Link href="/status" className="hover:text-gray-900 hover:underline">
