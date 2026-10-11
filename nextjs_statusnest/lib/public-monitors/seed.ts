@@ -1,6 +1,6 @@
 import { CommandBus } from '@/lib/cqrs/command-bus';
 import { PublicMonitorQueries } from './queries';
-import { PUBLIC_SITES, publicPageId, publicSiteId, isValidSlug } from './sites';
+import { PUBLIC_SITES, publicMonitorsEnabled, publicPageId, publicSiteId, isValidSlug } from './sites';
 import { DEFAULT_CHECK_TIER } from './schedule';
 
 /** The system-owned event stream that holds every public-monitor event. */
@@ -12,7 +12,12 @@ export const PUBLIC_MONITORS_USER_ID = 'public-monitors';
  * was removed from the config. Idempotent; safe to run on every startup.
  */
 export async function ensurePublicSites(): Promise<void> {
-  for (const site of PUBLIC_SITES) {
+  // With public monitors switched off the configured list is treated as
+  // empty, so everything previously registered is deactivated below.
+  const sites = publicMonitorsEnabled() ? PUBLIC_SITES : [];
+  if (!publicMonitorsEnabled()) console.log('Public monitors: disabled (PUBLIC_MONITORS=off)');
+  
+  for (const site of sites) {
     if (!isValidSlug(site.slug)) throw new Error(`Invalid site slug in config: ${site.slug}`);
     for (const page of site.pages) {
       if (!isValidSlug(page.slug)) throw new Error(`Invalid page slug in config: ${site.slug}/${page.slug}`);
@@ -24,7 +29,7 @@ export async function ensurePublicSites(): Promise<void> {
   const existing = new Map(queries.getSites({ includeInactive: true }).map(s => [s.id, s]));
   const configured = new Set<string>();
   
-  for (const [position, site] of PUBLIC_SITES.entries()) {
+  for (const [position, site] of sites.entries()) {
     const siteId = publicSiteId(site.slug);
     configured.add(siteId);
     const current = existing.get(siteId);

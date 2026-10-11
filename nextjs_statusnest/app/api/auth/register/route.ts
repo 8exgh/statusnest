@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createUser, createSession, findUserByEmail } from '@/lib/infrastructure/security/auth';
+import { createUser, createSession, findUserByEmail, registrationOpen } from '@/lib/infrastructure/security/auth';
 import { CommandBus } from '@/lib/cqrs/command-bus';
 
 export async function POST(request: NextRequest) {
@@ -10,6 +10,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
+      );
+    }
+    
+    if (!registrationOpen()) {
+      return NextResponse.json(
+        { error: 'Registration is closed on this StatusNest instance' },
+        { status: 403 }
       );
     }
     

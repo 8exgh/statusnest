@@ -58,6 +58,18 @@ export const PUBLIC_CATEGORIES = [
 
 export type PublicCategorySlug = (typeof PUBLIC_CATEGORIES)[number]['slug'];
 
+/**
+ * `PUBLIC_MONITORS=off` turns the public status pages off for a deployment.
+ * A private copy of StatusNest (one that only watches its owner's own sites)
+ * has no browser checker and should not publish a hundred never-checked
+ * pages: the seed then registers nothing and deactivates anything already
+ * registered, and robots.txt keeps crawlers out. The status pages stay
+ * reachable (they render as "no public monitors").
+ */
+export function publicMonitorsEnabled(): boolean {
+  return process.env.PUBLIC_MONITORS !== 'off';
+}
+
 export function categoryLabel(slug: string): string {
   return PUBLIC_CATEGORIES.find(c => c.slug === slug)?.label ?? 'Other';
 }

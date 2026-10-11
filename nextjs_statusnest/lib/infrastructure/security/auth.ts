@@ -45,6 +45,27 @@ export async function createUser(email: string, password: string): Promise<User>
   };
 }
 
+/** Number of registered accounts (used by the `REGISTRATION=first-user` gate). */
+export function countUsers(): number {
+  const db = getSystemDatabase();
+  try {
+    const row = db.prepare('SELECT COUNT(*) AS count FROM users').get() as { count: number };
+    return row.count;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * `REGISTRATION=first-user` closes self-service sign-up once one account
+ * exists: a private deployment is provisioned with a single owner account and
+ * must not let strangers register and point its alerts at their own phones.
+ */
+export function registrationOpen(): boolean {
+  if (process.env.REGISTRATION !== 'first-user') return true;
+  return countUsers() === 0;
+}
+
 export async function findUserByEmail(email: string): Promise<User | null> {
   const db = getSystemDatabase();
   
