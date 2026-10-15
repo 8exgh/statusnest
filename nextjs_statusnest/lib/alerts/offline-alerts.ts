@@ -44,13 +44,16 @@ export function buildOfflineAlertContent(check: Pick<OfflineCheck, 'domain' | 'r
     timeStyle: 'short'
   }) + ' UTC';
   
+  // The checker retries for its whole window before reporting offline, so
+  // responseTimeMs is how long the site stayed unreachable during the check.
+  const seconds = check.responseTimeMs && check.responseTimeMs >= 1000
+    ? ` for ${Math.round(check.responseTimeMs / 1000)} seconds`
+    : '';
   let reason: string;
   if (check.responseCode) {
-    reason = `The server responded with HTTP ${check.responseCode}.`;
-  } else if (check.responseTimeMs && check.responseTimeMs >= 1000) {
-    reason = `There was no response: the connection failed or timed out after ${Math.round(check.responseTimeMs / 1000)} seconds.`;
+    reason = `The server kept responding with HTTP ${check.responseCode}${seconds}.`;
   } else {
-    reason = 'There was no response: the connection failed.';
+    reason = `There was no response${seconds}: the connection failed or timed out.`;
   }
   
   return {

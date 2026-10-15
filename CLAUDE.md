@@ -106,7 +106,7 @@ When a domain transitions to `offline` (from `online` or `unknown` — never rep
 ### Background Processing Flow
 1. Background processor polls `/api/internal/tasks` every 5 seconds
 2. Retrieves domains where `next_check_at <= now`
-3. Performs HTTP GET with 10-second timeout
+3. Performs HTTP HEAD (HTTPS, then HTTP fallback). Any answer < 500 is online; fast failures (connection errors, 5xx) are retried until the window runs out (HTTPS 5s, HTTP 3s), so `offline` always means no usable response for the whole ~8s check — a single blip never reports offline (`status-checker.ts`)
 4. Reports status via `/api/internal/status-update`
 5. System writes events and schedules next check (+5 minutes)
 6. If the domain just went offline, the system pushes a `critical` alert to AlertTray (call + SMS, email fallback) and records the outcome
