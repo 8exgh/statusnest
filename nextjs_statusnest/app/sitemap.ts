@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { getSitemapData } from '@/lib/public-monitors/sitemap-data';
 import { absoluteUrl } from '@/lib/site-url';
+import { publicMonitorsEnabled } from '@/lib/public-monitors/sites';
 
 /**
  * Sitemap computed from the read model on every request.
@@ -18,16 +19,16 @@ export const dynamic = 'force-dynamic';
 /** Pages that are not derived from monitoring data. */
 const STATIC_ROUTES: { path: string; changeFrequency: MetadataRoute.Sitemap[number]['changeFrequency']; priority: number }[] = [
   { path: '/bot', changeFrequency: 'monthly', priority: 0.3 },
-  { path: '/register', changeFrequency: 'monthly', priority: 0.5 },
-  { path: '/login', changeFrequency: 'yearly', priority: 0.2 },
+  { path: '/how-it-works', changeFrequency: 'monthly', priority: 0.7 },
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  if (!publicMonitorsEnabled()) return [];
   const { sites, lastCheckedAt } = getSitemapData();
   
   // The home page and the status index both surface live check results, so
   // they last changed when the most recent check landed.
-  const indexModified = lastCheckedAt ?? new Date();
+  const indexModified = lastCheckedAt ?? undefined;
   
   const entries: MetadataRoute.Sitemap = [
     { url: absoluteUrl('/'), lastModified: indexModified, changeFrequency: 'hourly', priority: 1 },
@@ -48,12 +49,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     });
     
     for (const page of site.pages) {
-      if (!page.checked) continue;
+      if (!page.checked || page.position === 0) continue;
       entries.push({
         url: absoluteUrl(`/status/${site.slug}/${page.slug}`),
         lastModified: page.lastModified,
         changeFrequency: 'hourly',
-        priority: page.position === 0 ? sitePriority - 0.15 : sitePriority - 0.25,
+        priority: sitePriority - 0.25,
       });
     }
   }

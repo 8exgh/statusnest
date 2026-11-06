@@ -145,8 +145,16 @@ When a domain transitions to `offline` (from `online` or `unknown` — never rep
   - `getUptime` / `getDailyUptime` / `getSitesOverview` exclude `blocked = 1` rows, and `getIncidents` skips them, so a challenge affects no uptime figure and opens no incident,
   - the status pages render it as a distinct "couldn't verify" state, not a red outage.
   Sites are vetted with `verify-sites` before they go in the list, but intermittent challenges are expected in production — that is what this handling is for.
-- Pages (all `force-dynamic`, SSR, inline-SVG charts, JSON-LD): `/status` (grouped by category), `/status/{site}`, `/status/{site}/{page}`; `sitemap.xml` (~405 URLs) / `robots.txt`; the 10 headline sites on `/`. Status colours are the validated pair green `#059669` / red `#dc2626` with hatching + labels so state is never colour-alone.
+- Pages (all `force-dynamic`, SSR, inline-SVG charts, JSON-LD): `/status` (grouped by category), `/status/{site}`, `/status/{site}/{page}`; `sitemap.xml` (up to 304 canonical URLs) / `robots.txt`; the 10 headline sites on `/`. Primary-page URLs permanently redirect to the site overview. Status colours are the validated pair green `#059669` / red `#dc2626` with hatching + labels so state is never colour-alone.
 - `initializeApp()` is skipped during `next build` (`NEXT_PHASE=phase-production-build`) so builds never touch `data/`.
+
+### SEO and public status accuracy
+- `lib/seo.ts` owns canonical paths, page metadata, social cards and account-page noindex metadata. The homepage includes WebSite/Organization JSON-LD; `/how-it-works` documents check methods, uptime calculations, alerts, coverage and troubleshooting.
+- A primary page (`position: 0`) uses its site's overview URL everywhere and returns a 308 redirect from its old URL. Never-checked status pages are noindex and excluded from the sitemap; account pages are noindex and omitted too. Keep these pages crawlable in robots.txt so crawlers can read noindex. API routes carry an X-Robots-Tag header.
+- `sitemap.ts` uses actual check timestamps; no crawl-time lastmod fallback. Private deployments (`PUBLIC_MONITORS=off`) publish an empty sitemap and disallow crawling.
+- `verifyState` marks observations older than two maximum tier windows as stale (40 minutes primary, 120 standard). Cards, counts, detail badges and FAQ answers reflect this; stale checks are not reported as currently up/down. This is a read-side presentation rule, not a domain event or an outage.
+- `app/opengraph-image.tsx` generates the 1200×630 social image. The runtime Docker image must include `next.config.ts`, including its crawler metadata settings.
+- SEO regression coverage: `tests/seo.test.ts`; check generated HTML, redirects, sitemap, social image and mobile rendering against a temporary database when changing public pages.
 
 ## Environment Variables
 

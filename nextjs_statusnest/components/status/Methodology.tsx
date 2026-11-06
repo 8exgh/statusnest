@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { PublicPage } from '@/types';
 import { cadenceFor, cadenceSentence } from '@/lib/public-monitors/format';
+import { statusHref } from '@/lib/seo';
 
 interface MethodologyProps {
   siteName: string;
@@ -23,14 +24,20 @@ export default function Methodology({ siteName, pages, siteSlug, tier }: Methodo
             {pages.map((p, i) => (
               <span key={p.id}>
                 {i > 0 && ', '}
-                <Link href={`/status/${siteSlug}/${p.slug}`} className="text-blue-600 hover:underline">
+                <Link href={statusHref(siteSlug, p)} className="text-blue-600 hover:underline">
                   {p.name}
                 </Link>
               </span>
             ))}
           </>
         )}
-        . It is a full browser, not a script, so it sees what a visitor would see.
+        . This measures page availability from our monitoring server; experiences can differ by location, network and sign-in state.
+      </p>
+      <p>
+        Public uptime percentages are successful checks divided by all completed, non-blocked checks in the chosen window.
+        No checks means no data, rather than 100% uptime. A check older than two maximum scheduling windows is marked
+        overdue; it does not tell us whether the site is currently up or down.{' '}
+        <Link href="/how-it-works" className="text-blue-600 hover:underline">Read the monitoring methods and limitations.</Link>
       </p>
       <p>
         For every visit we record the HTTP status, how long the document took to load, the final URL after redirects and the page

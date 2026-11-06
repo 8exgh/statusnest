@@ -1,4 +1,8 @@
 import Link from 'next/link';
+import { publicMetadata } from '@/lib/seo';
+
+export const metadata = publicMetadata('Backlink Spider: Crawler Information | StatusNest',
+  'Information for website owners about the StatusNest Backlink Spider user agent, crawl rate and robots.txt controls.', '/bot');
 
 export default function BotPage() {
   return (

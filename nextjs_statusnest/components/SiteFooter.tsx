@@ -30,6 +30,9 @@ export default function SiteFooter() {
           <Link href="/dashboard" className="hover:text-gray-900 hover:underline">
             Dashboard
           </Link>
+          <Link href="/how-it-works" className="hover:text-gray-900 hover:underline">
+            How it works
+          </Link>
           <Link href="/bot" className="hover:text-gray-900 hover:underline">
             Backlink Spider
           </Link>

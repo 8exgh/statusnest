@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async headers() {
+    return [{ source: '/api/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }] }];
+  },
   // Next streams <title>/<meta> into the body for dynamic pages (React hoists
   // them into <head> on hydration). Crawlers and link-preview bots that do not
   // run JavaScript get the metadata rendered in <head> instead.

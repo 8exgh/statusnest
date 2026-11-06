@@ -11,10 +11,11 @@ export default function StatusLayout({ children }: { children: React.ReactNode }
             <Image src="/status_nest_logo.jpeg" alt="" width={32} height={32} className="rounded-md" />
             <span className="text-lg font-bold">StatusNest</span>
           </Link>
-          <nav className="flex items-center gap-4 text-sm">
+          <nav className="flex flex-wrap items-center gap-4 text-sm">
             <Link href="/status" className="text-gray-700 hover:text-gray-900">
               All status pages
             </Link>
+            <Link href="/how-it-works" className="text-gray-700 hover:text-gray-900">How it works</Link>
             <Link
               href="/register"
               className="rounded-lg bg-blue-600 px-3 py-1.5 font-medium text-white hover:bg-blue-700"

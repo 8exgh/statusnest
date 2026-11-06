@@ -1,5 +1,5 @@
 import type { PublicMonitorStatus } from '@/types';
-import { asCheckTier, describeCadence } from './schedule';
+import { asCheckTier, CHECK_TIERS, describeCadence } from './schedule';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -88,14 +88,25 @@ export function formatDayUTC(isoDay: string, withYear = false): string {
  * — it is usually fine and simply refusing an automated visitor — so it gets
  * its own state rather than being reported as an outage.
  */
-export type VerifyState = 'online' | 'offline' | 'blocked' | 'unknown';
+export type VerifyState = 'online' | 'offline' | 'blocked' | 'unknown' | 'stale';
 
-export function verifyState(status: PublicMonitorStatus, latestBlocked?: boolean): VerifyState {
+export function verifyState(status: PublicMonitorStatus, latestBlocked?: boolean, lastCheckedAt?: Date, now?: Date, tier = 'standard'): VerifyState {
+  if (now) {
+    if (!lastCheckedAt) return 'unknown';
+    const maximumAge = CHECK_TIERS[asCheckTier(tier)].maxMinutes * 2 * MINUTE;
+    if (now.getTime() - lastCheckedAt.getTime() > maximumAge) return 'stale';
+  }
   return latestBlocked ? 'blocked' : status;
+}
+
+export function staleExplanation(name: string, lastCheckedAt: Date | undefined, now: Date): string {
+  return `Our last check of ${name} was ${relativeTime(lastCheckedAt, now)}. That observation is older than two scheduled check windows, so we cannot confirm its current status. Historical results remain available below; a gap in monitoring is not evidence of an outage.`;
 }
 
 export function verifyLabel(state: VerifyState, name?: string): string {
   switch (state) {
+    case 'stale':
+      return 'Check overdue';
     case 'online':
       return name ? `${name} is up` : 'Online';
     case 'offline':

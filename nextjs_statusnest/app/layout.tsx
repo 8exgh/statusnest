@@ -4,6 +4,7 @@ import "./globals.css";
 import { initializeApp } from "@/lib/startup";
 import { getSiteUrl } from "@/lib/site-url";
 import SiteFooter from "@/components/SiteFooter";
+import { HOME_TITLE, HOME_DESCRIPTION } from '@/lib/seo';
 
 initializeApp();
 
@@ -19,8 +20,9 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
-  title: "StatusNest - Domain Monitoring",
-  description: "Monitor your domains with real-time status updates",
+  title: HOME_TITLE,
+  description: HOME_DESCRIPTION,
+  applicationName: 'StatusNest',
 };
 
 export default function RootLayout({

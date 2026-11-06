@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { loadSite, loadSiteDetail, requestNow } from '@/lib/public-monitors/page-data';
-import { blockedExplanation, cadenceFor, formatMs, formatUptime, relativeTime, statusWord, subjectName, verifyState } from '@/lib/public-monitors/format';
+import { blockedExplanation, cadenceFor, formatMs, relativeTime, staleExplanation, statusWord, subjectName, verifyState } from '@/lib/public-monitors/format';
 import { absoluteUrl } from '@/lib/site-url';
+import { publicMetadata, statusDescription, statusHref } from '@/lib/seo';
 import StatusHero from '@/components/status/StatusHero';
 import UptimeTiles from '@/components/status/UptimeTiles';
 import CheckStrip from '@/components/status/CheckStrip';
@@ -20,34 +21,12 @@ export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ site: string }> };
 
-function describe(name: string, status: 'online' | 'offline' | 'unknown', checkedAt: Date | undefined, uptime24h: number | null, uptime30d: number | null, now: Date, tier: string, latestBlocked = false): string {
-  const state = latestBlocked
-    ? `showed a bot check at our last visit ${relativeTime(checkedAt, now)}, so we could not verify it — it was last seen ${statusWord(status)}`
-    : status === 'unknown'
-      ? 'has not been checked yet'
-      : `is ${statusWord(status)} as of our last check ${relativeTime(checkedAt, now)}`;
-  const windows = uptime24h === null ? '' : ` 24-hour uptime ${formatUptime(uptime24h)}, 30-day uptime ${formatUptime(uptime30d)}.`;
-  return `${name} ${state}.${windows} StatusNest loads ${name} in a real Chromium browser ${cadenceFor(tier)}.`;
-}
-
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { site: slug } = await params;
   const site = loadSite(slug);
   if (!site) return { title: 'Site not found — StatusNest', robots: { index: false } };
-  const now = requestNow();
-  const detail = loadSiteDetail(slug, now.getTime());
-  const primaryId = site.pages[0]?.id;
-  const blocked = Boolean(primaryId && detail?.latestByPage.get(primaryId)?.blocked);
-  const title = `Is ${site.name} Down? Live ${site.name} Status & Uptime — StatusNest`;
-  const description = describe(site.name, site.status, site.lastCheckedAt, detail?.uptime.last24h.uptime ?? null, detail?.uptime.last30d.uptime ?? null, now, site.tier, blocked);
-  const url = absoluteUrl(`/status/${site.slug}`);
-  return {
-    title,
-    description,
-    alternates: { canonical: url },
-    openGraph: { title, description, url, type: 'website', siteName: 'StatusNest' },
-    twitter: { card: 'summary', title, description },
-  };
+  return publicMetadata(`Is ${site.name} Down? Status & Uptime | StatusNest`,
+    statusDescription(site.name), statusHref(site.slug), Boolean(site.pages[0]?.lastCheckedAt));
 }
 
 export default async function SiteStatusPage({ params }: Params) {
@@ -61,16 +40,19 @@ export default async function SiteStatusPage({ params }: Params) {
   // A bot challenge tells us nothing about whether the site is up, so it gets
   // its own state rather than being reported as an outage.
   const latestBlocked = Boolean(primary && latestByPage.get(primary.id)?.blocked);
-  const state = verifyState(site.status, latestBlocked);
+  const checkedAt = primary?.lastCheckedAt;
+  const state = verifyState(site.status, latestBlocked, checkedAt, now, site.tier);
 
   const faq: FaqItem[] = [
     {
       question: `Is ${site.name} down right now?`,
-      answer: latestBlocked
+      answer: state === 'stale'
+        ? staleExplanation(site.name, checkedAt, now)
+        : latestBlocked
         ? `We could not verify ${site.name} at our last visit ${relativeTime(primary?.lastCheckedAt ?? site.lastCheckedAt, now)}: it served a bot check to our browser instead of the page. That usually means the site is up but is refusing automated visitors, so we do not record it as an outage. The last check we could complete found it ${statusWord(site.status)}.`
-        : site.status === 'unknown'
-          ? `${site.name} has not been checked yet; the first check runs within a few minutes of it being added.`
-          : `As of our last check ${relativeTime(primary?.lastCheckedAt ?? site.lastCheckedAt, now)}, ${subjectName(site.name, primary?.name)} was ${statusWord(site.status)}. We load it in a real Chromium browser rather than a script, so what you see here is what a visitor would get.`,
+        : state === 'unknown'
+          ? `${site.name} has not been checked yet. Its current availability is unknown until a check completes.`
+          : `As of our last check ${relativeTime(checkedAt, now)}, ${subjectName(site.name, primary?.name)} was ${statusWord(site.status)} from our monitoring server. This is an independent observation; availability may differ by network, region or sign-in state.`,
     },
     {
       question: `How often is ${site.name} checked?`,
@@ -88,14 +70,14 @@ export default async function SiteStatusPage({ params }: Params) {
     },
     {
       question: 'Can StatusNest monitor my website?',
-      answer: 'Yes. Create a free account and add your domain: StatusNest checks it every 5 minutes and can phone, text and email you the moment it goes offline.',
+      answer: 'Yes. Create a free account and add your domain. StatusNest checks it about every five minutes and alerts you when a check detects an outage. Add a phone number for calls and SMS; email is the fallback.',
       render: (
         <>
           Yes.{' '}
           <Link href="/register" className="text-blue-600 hover:underline">
             Create a free account
           </Link>{' '}
-          and add your domain: StatusNest checks it every 5 minutes and can phone, text and email you the moment it goes offline.
+          and add your domain. StatusNest checks it about every five minutes and alerts you when a check detects an outage. Add a phone number for calls and SMS; email is the fallback.
         </>
       ),
     },
@@ -114,7 +96,7 @@ export default async function SiteStatusPage({ params }: Params) {
       '@context': 'https://schema.org',
       '@type': 'WebPage',
       name: `Is ${site.name} down right now?`,
-      description: describe(site.name, site.status, site.lastCheckedAt, uptime.last24h.uptime, uptime.last30d.uptime, now, site.tier, latestBlocked),
+      description: statusDescription(site.name),
       url,
       dateModified: (primary?.lastCheckedAt ?? site.updatedAt).toISOString(),
       isPartOf: { '@type': 'WebSite', name: 'StatusNest', url: absoluteUrl('/') },
@@ -138,15 +120,17 @@ export default async function SiteStatusPage({ params }: Params) {
         lastCheckedAt={primary?.lastCheckedAt ?? site.lastCheckedAt}
         now={now}
         detail={
-          !latestBlocked && primary && primary.status !== 'unknown' ? (
+          state !== 'stale' && !latestBlocked && primary && primary.status !== 'unknown' ? (
             <>
               {primary.name}: {primary.responseCode ? `HTTP ${primary.responseCode}` : 'no response'} · loaded in {formatMs(primary.responseTimeMs)}
             </>
           ) : undefined
         }
-        note={latestBlocked ? blockedExplanation(site.name, site.status, primary?.lastOnlineAt ?? primary?.lastCheckedAt, now) : undefined}
+        note={state === 'stale' ? staleExplanation(site.name, checkedAt, now) : latestBlocked ? blockedExplanation(site.name, site.status, site.status === 'online' ? primary?.lastOnlineAt : primary?.lastOfflineAt, now) : undefined}
         externalUrl={site.url}
       />
+
+      <p className="mb-8 max-w-3xl text-gray-700">{site.description} This independent status page follows the public pages listed below and is not an official status report from {site.name}.</p>
 
       <Section title={`${site.name} uptime`}>
         <UptimeTiles uptime={uptime} />
@@ -174,9 +158,10 @@ export default async function SiteStatusPage({ params }: Params) {
       <Section title={`${site.name} pages we monitor`}>
         <PagesTable
           now={now}
+          tier={site.tier}
           rows={site.pages.map((page) => ({
             page,
-            href: `/status/${site.slug}/${page.slug}`,
+            href: statusHref(site.slug, page),
             uptime24h: pageUptime24h.get(page.id) ?? { uptime: null, checks: 0, online: 0, offline: 0 },
             latestBlocked: Boolean(latestByPage.get(page.id)?.blocked),
           }))}
@@ -184,7 +169,7 @@ export default async function SiteStatusPage({ params }: Params) {
       </Section>
 
       <Section title="Recent incidents">
-        <IncidentList incidents={incidents30d} now={now} emptyLabel={`No incidents on any ${site.name} page in the last 30 days.`} />
+        <IncidentList incidents={incidents30d} now={now} emptyLabel={`No outages were detected in the recorded ${site.name} checks for the last 30 days. Gaps in monitoring are not proof of uptime.`} />
       </Section>
 
       <Section title={`How StatusNest checks ${site.name}`}>

@@ -33,6 +33,7 @@ COPY --from=builder /app/app ./app
 COPY --from=builder /app/components ./components
 COPY --from=builder /app/types ./types
 COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/next.config.ts ./next.config.ts
 
 # Create data directory for SQLite databases
 RUN mkdir -p /app/data && chmod 755 /app/data

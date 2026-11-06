@@ -1,23 +1,19 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PublicMonitorQueries, type PublicSiteOverview } from '@/lib/public-monitors/queries';
 import { PUBLIC_CATEGORIES } from '@/lib/public-monitors/sites';
 import { absoluteUrl } from '@/lib/site-url';
 import SiteCard from '@/components/status/SiteCard';
 import JsonLd from '@/components/status/JsonLd';
+import { publicMetadata } from '@/lib/seo';
+import { verifyState } from '@/lib/public-monitors/format';
 
 export const dynamic = 'force-dynamic';
 
-const TITLE = 'Is It Down? Live Status of the World’s Top Websites — StatusNest';
+const TITLE = 'Website Status & Outage History | StatusNest';
 const DESCRIPTION =
-  'Live up/down status and uptime history for 100 of the world’s most-used websites — Google, YouTube, GitHub, Discord, Steam, Netflix, Roblox and more — each loaded in a real Chromium browser, not a script.';
+  'Browse independent status checks, outages and uptime history for popular websites, including GitHub, Discord, YouTube, Steam and Netflix.';
 
-export const metadata: Metadata = {
-  title: TITLE,
-  description: DESCRIPTION,
-  alternates: { canonical: absoluteUrl('/status') },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: absoluteUrl('/status'), type: 'website', siteName: 'StatusNest' },
-};
+export const metadata = publicMetadata(TITLE, DESCRIPTION, '/status');
 
 /** Group overviews by category, in PUBLIC_CATEGORIES order; unknown categories fall to the end. */
 function groupByCategory(overviews: PublicSiteOverview[]) {
@@ -45,11 +41,13 @@ export default function StatusIndexPage() {
   const overviews = new PublicMonitorQueries().getSitesOverview(now);
   // A site whose newest check hit a bot challenge is neither "up" nor "down" —
   // we simply could not verify it, so it is counted (and listed) separately.
-  const blockedSites = overviews.filter((o) => o.latestBlocked);
-  const verifiable = overviews.filter((o) => !o.latestBlocked);
+  const stateOf = (o: PublicSiteOverview) => verifyState(o.site.status, o.latestBlocked, o.primary?.lastCheckedAt, now, o.site.tier);
+  const blockedSites = overviews.filter((o) => stateOf(o) === 'blocked');
+  const staleSites = overviews.filter((o) => stateOf(o) === 'stale');
+  const verifiable = overviews.filter((o) => ['online', 'offline'].includes(stateOf(o)));
   const up = verifiable.filter((o) => o.site.status === 'online').length;
   const downSites = verifiable.filter((o) => o.site.status === 'offline');
-  const unchecked = verifiable.length - up - downSites.length;
+  const unchecked = overviews.filter((o) => stateOf(o) === 'unknown').length;
   const groups = groupByCategory(overviews);
 
   const jsonLd = {
@@ -70,21 +68,23 @@ export default function StatusIndexPage() {
     <>
       <JsonLd data={jsonLd} />
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 sm:text-4xl">Live status of the world’s top websites</h1>
+        <h1 className="text-3xl font-bold text-gray-900 sm:text-4xl">Website status and outage history</h1>
         <p className="mt-3 max-w-3xl text-gray-700">
-          Each of these {overviews.length} sites is loaded in a <strong>real Chromium browser</strong> on a virtual display — not a
-          script — so what you see here is what a visitor would get. The best-known sites are checked every 5–20 minutes and the
+          Each of these {overviews.length} sites is checked from a <strong>real Chromium browser</strong> on our monitoring server.
+          These are independent observations, rather than official service reports. The best-known sites are checked every 5–20 minutes and the
           rest every 20–60 minutes, always on a randomised schedule. Click any site for its uptime history, load times and every
           page we track.
         </p>
         <p className="mt-3 text-lg">
           <strong className="text-gray-900">
-            {up} of {verifiable.length} up
+            {up} recently observed online
           </strong>
           {downSites.length > 0 && <span className="text-gray-700"> · {downSites.length} unavailable</span>}
           {blockedSites.length > 0 && <span className="text-gray-700"> · {blockedSites.length} couldn’t verify</span>}
+          {staleSites.length > 0 && <span className="text-gray-700"> · {staleSites.length} checks overdue</span>}
           {unchecked > 0 && <span className="text-gray-700"> · {unchecked} not checked yet</span>}
         </p>
+        <p className="mt-3 text-sm text-gray-600">Check the timestamp before relying on a result. Overdue checks and bot challenges do not establish current availability. <Link href="/how-it-works" className="text-blue-600 hover:underline">How monitoring works</Link>.</p>
       </header>
 
       {downSites.length > 0 && (
@@ -150,7 +150,7 @@ export default function StatusIndexPage() {
 
           <div className="space-y-10">
             {groups.map((group) => {
-              const groupVerifiable = group.sites.filter((o) => !o.latestBlocked);
+              const groupVerifiable = group.sites.filter((o) => ['online', 'offline'].includes(stateOf(o)));
               const groupUp = groupVerifiable.filter((o) => o.site.status === 'online').length;
               return (
                 <section key={group.slug} id={group.slug} className="scroll-mt-4">
@@ -179,9 +179,10 @@ export default function StatusIndexPage() {
       )}
 
       <section className="mt-12 rounded-lg border border-blue-200 bg-blue-50 p-6">
-        <h2 className="text-lg font-semibold text-gray-900">Monitor your own website the same way</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Get monitoring and alerts for your own website</h2>
         <p className="mt-1 text-sm text-gray-700">
-          StatusNest checks your domains every 5 minutes and can phone, text and email you the moment one goes offline.
+          StatusNest checks your domains with HTTP requests every five minutes, sends an alert when a check detects an outage,
+          and emails a weekly uptime summary. Add a phone number for calls and SMS, or receive email alerts instead.
         </p>
         <Link href="/register" className="mt-3 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
           Create a free account

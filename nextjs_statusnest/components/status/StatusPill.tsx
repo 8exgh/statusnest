@@ -14,6 +14,7 @@ const STYLES: Record<VerifyState, { bg: string; border: string; icon: string; co
   // Deliberately not red or amber: a bot challenge is not evidence of an outage.
   blocked: { bg: 'bg-slate-100', border: 'border-slate-300', icon: '?', color: STATUS_COLORS.blocked, label: 'Couldn’t verify' },
   unknown: { bg: 'bg-gray-100', border: 'border-gray-200', icon: '○', color: STATUS_COLORS.text, label: 'Not checked yet' },
+  stale: { bg: 'bg-slate-100', border: 'border-slate-300', icon: '◷', color: STATUS_COLORS.text, label: 'Check overdue' },
 };
 
 const SIZES = {

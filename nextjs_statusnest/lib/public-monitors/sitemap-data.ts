@@ -78,7 +78,7 @@ export function getSitemapData(): SitemapData {
         slug: row.slug,
         tier: asCheckTier(row.tier),
         lastModified,
-        checked: Boolean(row.last_checked_at),
+        checked: Boolean(pagesBySite.get(row.id)?.find(page => page.position === 0)?.checked),
         pages: pagesBySite.get(row.id) ?? []
       };
     });

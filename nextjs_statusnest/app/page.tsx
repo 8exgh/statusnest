@@ -2,6 +2,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { PublicMonitorQueries } from '@/lib/public-monitors/queries';
 import SiteCard from '@/components/status/SiteCard';
+import JsonLd from '@/components/status/JsonLd';
+import { HOME_TITLE, HOME_DESCRIPTION, publicMetadata } from '@/lib/seo';
+import { absoluteUrl } from '@/lib/site-url';
+
+export const metadata = publicMetadata(HOME_TITLE, HOME_DESCRIPTION, '/');
 
 // Reads the live public-monitor read model on every request.
 export const dynamic = 'force-dynamic';
@@ -14,7 +19,13 @@ export default function Home() {
   const others = all.length - overviews.length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+    <main className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+      <JsonLd data={[
+        { '@context': 'https://schema.org', '@type': 'WebSite', '@id': absoluteUrl('/#website'),
+          name: 'StatusNest', url: absoluteUrl('/'), description: HOME_DESCRIPTION, inLanguage: 'en', publisher: { '@id': absoluteUrl('/#organization') } },
+        { '@context': 'https://schema.org', '@type': 'Organization', '@id': absoluteUrl('/#organization'),
+          name: 'StatusNest', url: absoluteUrl('/'), logo: absoluteUrl('/status_nest_logo.jpeg') }
+      ]} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center">
           <div className="mb-6">
@@ -28,12 +39,12 @@ export default function Home() {
             />
           </div>
           <h1 className="text-5xl font-extrabold text-gray-900 mb-4">
-            StatusNest
+            Website uptime monitoring<br className="hidden sm:block" /> and outage alerts
           </h1>
           <p className="text-xl text-gray-600 mb-8">
-            Monitor your domains with real-time status updates
+            Check your websites every five minutes, get alerts when a check detects an outage, and review uptime in a weekly email.
           </p>
-          <div className="space-x-4">
+          <div className="flex flex-wrap justify-center gap-4">
             <Link
               href="/register"
               className="inline-block px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -47,16 +58,17 @@ export default function Home() {
               Sign In
             </Link>
           </div>
+          <p className="mt-5 text-sm text-gray-600"><Link href="/how-it-works" className="text-blue-600 hover:underline">How uptime checks, alerts and weekly reports work</Link></p>
         </div>
         
         {overviews.length > 0 && (
           <section className="mt-20" aria-labelledby="top-sites-heading">
             <div className="text-center">
               <h2 id="top-sites-heading" className="text-3xl font-bold text-gray-900">
-                Live status of the world’s top websites
+                Is a popular website down?
               </h2>
               <p className="mt-2 text-gray-600">
-                Checked from a real Chromium browser, not a script — is it down, or is it just you?
+                Browse independent browser checks, recent outages and uptime history. Each result shows when it was last checked.
               </p>
             </div>
             <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -72,15 +84,17 @@ export default function Home() {
           </section>
         )}
 
-        <div className="mt-20 grid md:grid-cols-3 gap-8">
+        <section className="mt-20" aria-labelledby="monitoring-features">
+          <h2 id="monitoring-features" className="mb-8 text-center text-3xl font-bold text-gray-900">Monitor, get alerted, and review uptime</h2>
+          <div className="grid md:grid-cols-3 gap-8">
           <div className="text-center">
             <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold mb-2 text-gray-900">Real-time Monitoring</h3>
-            <p className="text-gray-600">Check domain status every 5 minutes with instant updates</p>
+            <h3 className="text-lg font-semibold mb-2 text-gray-900">Five-minute website checks</h3>
+            <p className="text-gray-600">Add a domain to track whether its web server responds. See the latest result and response time on your dashboard.</p>
           </div>
           
           <div className="text-center">
@@ -89,21 +103,30 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold mb-2 text-gray-900">Event Sourcing</h3>
-            <p className="text-gray-600">Built with CQRS and Event Sourcing for reliability</p>
+            <h3 className="text-lg font-semibold mb-2 text-gray-900">Outage alerts by phone or email</h3>
+            <p className="text-gray-600">Add your phone number for critical calls and SMS through AlertTray. Without a number, alerts go to your email.</p>
           </div>
           
           <div className="text-center">
             <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v16h16M8 16v-5m4 5V7m4 9v-7" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold mb-2 text-gray-900">Secure & Private</h3>
-            <p className="text-gray-600">Your data is isolated and protected with enterprise security</p>
+            <h3 className="text-lg font-semibold mb-2 text-gray-900">Weekly uptime and outage reports</h3>
+            <p className="text-gray-600">Review online percentages, detected outages and monitoring coverage. Turn weekly emails on or off in your Profile.</p>
           </div>
-        </div>
+          </div>
+        </section>
+        <section className="mt-16 rounded-xl border border-blue-100 bg-white p-6 sm:p-8">
+          <h2 className="text-2xl font-bold text-gray-900">Is it the website, or your connection?</h2>
+          <p className="mt-3 text-gray-700">A successful check means the page responded from our monitoring server. It may still fail on another network or behind a sign-in screen. Start with the latest check time, then compare another connection and the service’s own status information.</p>
+          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-blue-600">
+            <Link href="/status" className="font-medium hover:underline">Browse website status pages</Link>
+            <Link href="/how-it-works#troubleshooting" className="font-medium hover:underline">Troubleshoot a website that won’t load</Link>
+          </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

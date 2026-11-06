@@ -13,7 +13,8 @@ export default function robots(): MetadataRoute.Robots {
     return { rules: [{ userAgent: '*', disallow: '/' }] };
   }
   return {
-    rules: [{ userAgent: '*', allow: '/', disallow: ['/api/', '/dashboard', '/profile'] }],
+    // Account pages must be crawlable for their noindex metadata to be read.
+    rules: [{ userAgent: '*', allow: '/', disallow: ['/api/'] }],
     sitemap: absoluteUrl('/sitemap.xml'),
   };
 }

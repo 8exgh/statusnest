@@ -76,6 +76,30 @@ docker run --rm --network host --shm-size=1g \
   browser-checker-statusnest
 ```
 
+## Search visibility and monitoring documentation
+
+The homepage describes website monitoring, outage alerts and weekly reports. Public pages have canonical
+URLs, distinct metadata, Open Graph/Twitter previews and structured data. The [monitoring guide](https://statusnest.com/how-it-works)
+explains how public browser checks differ from account HTTP checks, how uptime is calculated, and what
+monitoring gaps and bot challenges mean.
+
+Primary-page paths such as `/status/github/home` permanently redirect to `/status/github`. Internal links
+and the sitemap use that same canonical URL; secondary pages such as `/status/github/explore` stay distinct.
+The sitemap includes only checked monitoring pages, plus the homepage, status directory, guide and crawler
+information. It omits login, registration and account screens. Those screens carry `noindex` metadata and
+remain crawlable so search engines can read it. Private deployments publish an empty sitemap.
+
+Status observations become **check overdue** after two maximum scheduling windows (40 minutes for headline
+sites, two hours for standard sites). Old observations remain available as history but do not count as
+currently online or offline in the directory. Never-checked pages remain noindex until observations exist.
+Search descriptions describe the report rather than embedding a status that could go stale in a search snippet.
+
+Implementation follows Google's guidance on [canonical URLs](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls),
+[noindex](https://developers.google.com/search/docs/crawling-indexing/block-indexing), and
+[sitemap timestamps](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap).
+Search Console query and indexing data were not available for this audit; ranking or traffic improvements
+must be measured after recrawling rather than inferred from these technical changes.
+
 ## Offline Alerts
 
 When a monitored domain stops responding, StatusNest raises a highest-priority (`critical`) notification through

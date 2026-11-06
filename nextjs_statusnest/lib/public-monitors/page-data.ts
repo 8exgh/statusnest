@@ -2,6 +2,7 @@ import { cache } from 'react';
 import type { PublicPage, PublicSite } from '@/types';
 import { PublicMonitorQueries, type Incident, type UptimeSummary, type DailyUptime } from './queries';
 import type { PublicPageCheck } from '@/types';
+import { statusHref } from '@/lib/seo';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -36,7 +37,7 @@ function incidentsFor(queries: PublicMonitorQueries, site: PublicSite, page: Pub
   return queries.getIncidents(page.id, since, now).map((inc) => ({
     ...inc,
     pageName: page.name,
-    pageHref: `/status/${site.slug}/${page.slug}`
+    pageHref: statusHref(site.slug, page)
   }));
 }
 

@@ -12,7 +12,7 @@ export interface PageRow {
   latestBlocked?: boolean;
 }
 
-export default function PagesTable({ rows, now }: { rows: PageRow[]; now: Date }) {
+export default function PagesTable({ rows, now, tier }: { rows: PageRow[]; now: Date; tier: string }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
       <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -36,7 +36,7 @@ export default function PagesTable({ rows, now }: { rows: PageRow[]; now: Date }
                 <div className="truncate text-xs text-gray-500">{page.url}</div>
               </td>
               <td className="px-4 py-2">
-                <StatusPill status={verifyState(page.status, latestBlocked)} size="sm" />
+                <StatusPill status={verifyState(page.status, latestBlocked, page.lastCheckedAt, now, tier)} size="sm" />
               </td>
               <td className="px-4 py-2 tabular-nums text-gray-700">{page.responseCode ?? '—'}</td>
               <td className="px-4 py-2 tabular-nums text-gray-700">{formatMs(page.responseTimeMs)}</td>

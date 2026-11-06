@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { loadPageDetail, loadSite, requestNow } from '@/lib/public-monitors/page-data';
-import { blockedExplanation, cadenceFor, formatMs, formatUptime, relativeTime, statusWord, subjectName, verifyState } from '@/lib/public-monitors/format';
+import { blockedExplanation, cadenceFor, formatMs, relativeTime, staleExplanation, statusWord, subjectName, verifyState } from '@/lib/public-monitors/format';
 import { absoluteUrl } from '@/lib/site-url';
+import { publicMetadata, statusDescription, statusHref } from '@/lib/seo';
 import StatusHero from '@/components/status/StatusHero';
 import UptimeTiles from '@/components/status/UptimeTiles';
 import CheckStrip from '@/components/status/CheckStrip';
@@ -25,36 +26,22 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const site = loadSite(siteSlug);
   const page = site?.pages.find((p) => p.slug === pageSlug);
   if (!site || !page) return { title: 'Page not found — StatusNest', robots: { index: false } };
-  const now = requestNow();
-  const data = loadPageDetail(siteSlug, pageSlug, now.getTime());
+  if (page.position === 0) permanentRedirect(statusHref(site.slug));
   const name = subjectName(site.name, page.name);
-  const title = `Is ${name} Down? Live Status & Uptime — StatusNest`;
-  const blocked = Boolean(data?.latest?.blocked);
-  const state = blocked
-    ? `showed a bot check at our last visit ${relativeTime(page.lastCheckedAt, now)}, so we could not verify it — it was last seen ${statusWord(page.status)}`
-    : page.status === 'unknown'
-      ? 'has not been checked yet'
-      : `is ${statusWord(page.status)} as of our last check ${relativeTime(page.lastCheckedAt, now)}`;
-  const windows = data && data.uptime.last24h.uptime !== null ? ` 24-hour uptime ${formatUptime(data.uptime.last24h.uptime)}, 30-day uptime ${formatUptime(data.uptime.last30d.uptime)}.` : '';
-  const description = `${name} (${page.url}) ${state}.${windows} Checked from a real Chromium browser ${cadenceFor(site.tier)} by StatusNest.`;
-  const url = absoluteUrl(`/status/${site.slug}/${page.slug}`);
-  return {
-    title,
-    description,
-    alternates: { canonical: url },
-    openGraph: { title, description, url, type: 'website', siteName: 'StatusNest' },
-    twitter: { card: 'summary', title, description },
-  };
+  return publicMetadata(`Is ${name} Down? Status & Uptime | StatusNest`,
+    statusDescription(name), statusHref(site.slug, page), Boolean(page.lastCheckedAt));
 }
 
 export default async function PageStatusPage({ params }: Params) {
   const { site: siteSlug, page: pageSlug } = await params;
+  const knownPage = loadSite(siteSlug)?.pages.find(p => p.slug === pageSlug);
+  if (knownPage?.position === 0) permanentRedirect(statusHref(siteSlug));
   const now = requestNow();
   const data = loadPageDetail(siteSlug, pageSlug, now.getTime());
   if (!data) notFound();
   const { site, page, uptime, checks24h, daily90, incidents30d, latest } = data;
   const latestBlocked = Boolean(latest?.blocked);
-  const state = verifyState(page.status, latestBlocked);
+  const state = verifyState(page.status, latestBlocked, page.lastCheckedAt, now, site.tier);
   const name = subjectName(site.name, page.name);
   const url = absoluteUrl(`/status/${site.slug}/${page.slug}`);
   const siblings = site.pages.filter((p) => p.id !== page.id);
@@ -62,11 +49,13 @@ export default async function PageStatusPage({ params }: Params) {
   const faq: FaqItem[] = [
     {
       question: `Is ${name} down right now?`,
-      answer: latestBlocked
+      answer: state === 'stale'
+        ? staleExplanation(name, page.lastCheckedAt, now)
+        : latestBlocked
         ? `We could not verify ${name} at our last visit ${relativeTime(page.lastCheckedAt, now)}: it served a bot check to our browser instead of the page. That usually means it is up but refusing automated visitors, so we do not record it as an outage. The last check we could complete found it ${statusWord(page.status)}.`
         :
-        page.status === 'unknown'
-          ? `${name} has not been checked yet; the first check runs within a few minutes of it being added.`
+        state === 'unknown'
+          ? `${name} has not been checked yet. Its current availability is unknown until a check completes.`
           : `As of our last check ${relativeTime(page.lastCheckedAt, now)}, ${page.url} was ${statusWord(page.status)}${page.responseCode ? ` (HTTP ${page.responseCode}, loaded in ${formatMs(page.responseTimeMs)})` : ''}. We load it in a real Chromium browser rather than a script.`,
     },
     {
@@ -81,18 +70,18 @@ export default async function PageStatusPage({ params }: Params) {
     {
       question: 'What does "unavailable" mean?',
       answer:
-        'The page did not load in our browser: the server returned an error (HTTP 4xx or 5xx), the page timed out after 30 seconds, the address could not be resolved or connected to, or the site showed a bot challenge instead of the real page.',
+        'The page did not load in our browser: the server returned an error (HTTP 4xx or 5xx), the page timed out after 30 seconds, or the address could not be resolved or connected to. Bot challenges are recorded separately and are not counted as outages.',
     },
     {
       question: 'Can StatusNest monitor my website?',
-      answer: 'Yes. Create a free account and add your domain: StatusNest checks it every 5 minutes and can phone, text and email you the moment it goes offline.',
+      answer: 'Yes. Create a free account and add your domain. StatusNest checks it about every five minutes and alerts you when a check detects an outage. Add a phone number for calls and SMS; email is the fallback.',
       render: (
         <>
           Yes.{' '}
           <Link href="/register" className="text-blue-600 hover:underline">
             Create a free account
           </Link>{' '}
-          and add your domain: StatusNest checks it every 5 minutes and can phone, text and email you the moment it goes offline.
+          and add your domain. StatusNest checks it about every five minutes and alerts you when a check detects an outage. Add a phone number for calls and SMS; email is the fallback.
         </>
       ),
     },
@@ -112,6 +101,7 @@ export default async function PageStatusPage({ params }: Params) {
       '@context': 'https://schema.org',
       '@type': 'WebPage',
       name: `Is ${name} down right now?`,
+      description: statusDescription(name),
       url,
       dateModified: (page.lastCheckedAt ?? page.updatedAt).toISOString(),
       isPartOf: { '@type': 'WebSite', name: 'StatusNest', url: absoluteUrl('/') },
@@ -134,8 +124,8 @@ export default async function PageStatusPage({ params }: Params) {
         status={state}
         lastCheckedAt={page.lastCheckedAt}
         now={now}
-        detail={!latestBlocked && page.status !== 'unknown' ? <>{page.responseCode ? `HTTP ${page.responseCode}` : 'no response'} · loaded in {formatMs(page.responseTimeMs)}</> : undefined}
-        note={latestBlocked ? blockedExplanation(name, page.status, page.lastOnlineAt ?? page.lastCheckedAt, now) : undefined}
+        detail={state !== 'stale' && !latestBlocked && page.status !== 'unknown' ? <>{page.responseCode ? `HTTP ${page.responseCode}` : 'no response'} · loaded in {formatMs(page.responseTimeMs)}</> : undefined}
+        note={state === 'stale' ? staleExplanation(name, page.lastCheckedAt, now) : latestBlocked ? blockedExplanation(name, page.status, page.status === 'online' ? page.lastOnlineAt : page.lastOfflineAt, now) : undefined}
         externalUrl={page.url}
       />
 
@@ -162,7 +152,7 @@ export default async function PageStatusPage({ params }: Params) {
       </Section>
 
       <Section title="Recent incidents">
-        <IncidentList incidents={incidents30d} now={now} emptyLabel={`No incidents on ${name} in the last 30 days.`} />
+        <IncidentList incidents={incidents30d} now={now} emptyLabel={`No outages were detected in the recorded ${name} checks for the last 30 days. Gaps in monitoring are not proof of uptime.`} />
       </Section>
 
       {siblings.length > 0 && (
@@ -175,7 +165,7 @@ export default async function PageStatusPage({ params }: Params) {
             </li>
             {siblings.map((p) => (
               <li key={p.id}>
-                <Link href={`/status/${site.slug}/${p.slug}`} className="inline-block rounded-full border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100">
+                <Link href={statusHref(site.slug, p)} className="inline-block rounded-full border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100">
                   {p.name}
                 </Link>
               </li>
