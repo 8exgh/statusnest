@@ -1,5 +1,6 @@
 import { getProjectionEngine } from './cqrs/projection-engine';
 import { ensurePublicSites } from './public-monitors/seed';
+import { startSummaryAutomation } from './email/summary-automation';
 
 let initialized = false;
 
@@ -23,6 +24,7 @@ export function initializeApp() {
   const projectionEngine = getProjectionEngine();
   projectionEngine.start().catch(console.error);
   console.log('StatusNest: Projection engine started');
+  startSummaryAutomation();
   
   ensurePublicSites().catch(error => console.error('StatusNest: public monitor seed failed:', error));
 }

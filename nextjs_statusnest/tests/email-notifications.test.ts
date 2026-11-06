@@ -28,7 +28,7 @@ async function setup() {
   return { userId, bus: new CommandBus(), store: new EventStore(), query: new QueryBus(), project, getReadModelDatabase };
 }
 
-test('signup and website commands queue one email each; unrelated events and public monitors do not', async () => {
+test('signup queues admin and onboarding emails; websites queue admin emails; unrelated events do not', async () => {
   const { userId, bus, store, query, project } = await setup();
   const email = `${userId}@example.com`;
   await bus.dispatch({ userId, aggregateId: userId, type: 'RecordUserRegistration', payload: { email } });
@@ -37,12 +37,14 @@ test('signup and website commands queue one email each; unrelated events and pub
   await bus.dispatch({ userId, aggregateId: domainId, type: 'ActivateDomain', payload: { domainId, domain: 'example.com' } });
   await bus.dispatch({ userId, aggregateId: `public-${userId}`, type: 'RegisterPublicSite', payload: { slug: `public-${userId}`, name: 'Example', url: 'https://example.com' } });
   const events = await store.getEvents(userId);
-  assert.equal(events.filter(event => event.eventType === 'EmailNotificationRequestedEvent').length, 2);
+  assert.equal(events.filter(event => event.eventType === 'EmailNotificationRequestedEvent').length, 3);
   assert.equal((await query.getPendingEmails()).filter(task => task.userId === userId).length, 0);
   await project();
   const tasks = (await query.getPendingEmails()).filter(task => task.userId === userId);
-  assert.equal(tasks.length, 2);
-  assert(tasks.every(task => task.to === 'sbennett@8examples.com' && task.text.includes(email)));
+  assert.equal(tasks.length, 3);
+  assert(tasks.every(task => task.text.includes(email)));
+  assert.equal(tasks.filter(task => task.to === 'sbennett@8examples.com').length, 2);
+  assert(tasks.some(task => task.to === email && task.subject.includes('Welcome')));
   assert(tasks.some(task => task.subject.includes('signup')));
   assert(tasks.some(task => task.subject.includes('website') && task.text.includes('Website: example.com')));
   await project();
@@ -66,13 +68,13 @@ test('claims serialize before projection catches up; receipts are idempotent and
   await assert.rejects(bus.dispatch(command('ClaimEmailNotification', 'worker-three')));
   assert.equal((await store.getEvents(userId)).filter(event => event.eventType === 'EmailNotificationSentEvent').length, 1);
   await project();
-  assert(!(await query.getPendingEmails()).some(task => task.userId === userId));
+  assert(!(await query.getPendingEmails()).some(pending => pending.notificationId === task.notificationId));
   const db = getReadModelDatabase();
   db.prepare('DELETE FROM email_notifications WHERE user_id = ?').run(userId);
   db.prepare('DELETE FROM projection_checkpoints WHERE user_id = ?').run(userId);
   db.close();
   await project();
-  assert(!(await query.getPendingEmails()).some(task => task.userId === userId));
+  assert(!(await query.getPendingEmails()).some(pending => pending.notificationId === task.notificationId));
 });
 
 test('failure backs off; expired claims recover; stale workers cannot acknowledge a newer claim', async () => {
@@ -154,7 +156,9 @@ test('real registration routes queue emails only for successful signup and websi
   assert.equal((await addWebsite(domainRequest('example.com'))).status, 200);
   const events = await new EventStore().getEvents(user.id);
   const emails = events.filter(event => event.eventType === 'EmailNotificationRequestedEvent');
-  assert.equal(emails.length, 2);
-  assert.deepEqual(emails.map(event => event.eventData.kind), ['signup', 'website-added']);
-  assert(emails.every(event => event.eventData.to === 'sbennett@8examples.com' && event.eventData.text.includes(email)));
+  assert.equal(emails.length, 3);
+  assert.deepEqual(emails.map(event => event.eventData.kind), ['signup', 'onboarding', 'website-added']);
+  assert(emails.every(event => event.eventData.text.includes(email)));
+  assert.equal(emails.find(event => event.eventData.kind === 'onboarding')!.eventData.to, email);
+  assert(emails.filter(event => event.eventData.kind !== 'onboarding').every(event => event.eventData.to === 'sbennett@8examples.com'));
 });

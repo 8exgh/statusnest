@@ -32,6 +32,7 @@ COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/app ./app
 COPY --from=builder /app/components ./components
 COPY --from=builder /app/types ./types
+COPY --from=builder /app/scripts ./scripts
 
 # Create data directory for SQLite databases
 RUN mkdir -p /app/data && chmod 755 /app/data

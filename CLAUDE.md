@@ -89,6 +89,16 @@ When a domain transitions to `offline` (from `online` or `unknown` — never rep
 - Read model: `domain_monitors.last_alert_at / last_alert_channels / last_alert_error` (idempotent `ensureColumn` migrations) — shown on the dashboard.
 - Without `ALERTTRAY_API_KEY` the alert is logged and recorded as failed (`DomainOfflineAlertFailedEvent`), nothing is sent.
 
+### Customer email reports
+- `lib/email/customer-emails.ts`: welcome email requested atomically with a new user registration; deterministic IDs, no retrospective welcomes on replay.
+- `lib/email/weekly-summary.ts`: event-sourced weekly schedule; `StartWeeklySummaries` enrolls existing accounts once with an immediate first report; new registrations schedule their first report one week later. `PrepareWeeklySummary` appends the report snapshot, next due time, and email outbox request in one transaction.
+- `lib/email/reporting-projection.ts`: independent, batched history backfill with its own checkpoint; per-user observations, report snapshots, and the weekly-schedule todo view. Does not reset the main projection or send email.
+- `lib/email/summary-automation.ts`: startup + 60-second timer reads the todo view and issues commands; authoritative schedule checks make competing or repeated ticks safe. Missed weeks coalesce to the latest due report.
+- `lib/email/uptime-report.ts`: time-weighted uptime and outage episodes; checks cover at most ten minutes, pauses and gaps are excluded, no data is N/A. UTC half-open windows; public monitors excluded.
+- HMAC `/api/internal/weekly-summaries`: POST runs the robot; GET reads delivery state. Devops runs `scripts/weekly-summary-after-deploy.mjs` inside the app container after the health check and verifies SMTP acceptance via recorded delivery outcomes.
+- Existing Gmail worker handles welcome and report emails without changes. Delivery remains at least once across a crash after SMTP acceptance.
+- `tests/weekly-summary.test.ts`: executable event-model specifications. See README for the slice table and report semantics.
+
 ### Security
 - HMAC signatures for internal API communication using shared `BACKGROUND_PROCESSOR_API_KEY`
 - Session-based authentication for users

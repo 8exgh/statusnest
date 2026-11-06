@@ -34,6 +34,7 @@ npm run dev
 
 - User registration and authentication
 - Signup and website-added email notifications to `sbennett@8examples.com`
+- Welcome emails for new accounts and weekly uptime/outage reports to each account email
 - Domain monitoring with 5-minute interval checks
 - Real-time status updates (1-second polling)
 - **Offline alerts**: a phone call + SMS (or email) the moment a domain goes offline (via AlertTray)
@@ -139,6 +140,66 @@ cd ../background_processor && npm test
 ```
 
 ## Testing the System
+
+### Welcome and weekly report emails
+
+Successful registration atomically records `UserRegisteredEvent`, the existing admin email request,
+an onboarding `EmailNotificationRequestedEvent`, and `WeeklySummaryScheduleStartedEvent`. The welcome
+email links to the dashboard and alert profile and explains monitoring and weekly reports. Retrying
+registration recording cannot queue another welcome. Historical registration replay does not send welcomes.
+
+Every account receives a report every seven days, anchored to its schedule's UTC timestamp. New accounts
+receive their first report one week after registration. Existing accounts receive an immediate report on
+the first deployment of this feature, covering the preceding seven days, then every seven days thereafter.
+Restarts and later deploys preserve this schedule. After prolonged downtime, only the latest due report is
+prepared, avoiding a backlog of obsolete emails. Reports go to the account email; the separate alert email
+continues to apply to outage alerts.
+
+The startup automation runs immediately and every minute. It reads the `weekly_summary_schedule` todo
+view and issues `PrepareWeeklySummary`. This command checks the authoritative schedule stream under a
+write transaction and atomically appends `WeeklySummaryPreparedEvent` (the full report snapshot, source
+sequence, and next due time) and a deterministic `EmailNotificationRequestedEvent`. The existing Gmail
+worker claims and delivers it, then records the outcome. Queries and projections never send mail.
+
+The report uses time-weighted online percentage: online / (online + offline). Each check covers at most
+ten minutes, ending sooner at the next check or monitoring pause. The email separately shows monitoring
+coverage, unknown time, paused time, and outage start/end/duration estimates. No observations means N/A,
+never 100%. Unknown gaps split outage episodes; public SEO monitors are excluded. Reports use half-open
+UTC windows and clip outages crossing a window boundary. Overall uptime weights each site's observed time.
+
+`reporting_checkpoints` independently backfills existing domain events in batches, so introducing this
+projection does not reset the existing email-delivery checkpoint. Report history and schedules rebuild
+from their events; rebuilding does not request new email. SMTP delivery retains the at-least-once caveat
+described above.
+
+The devops workflow runs this after its HTTP health check:
+
+```bash
+docker exec nextjs-statusnest node scripts/weekly-summary-after-deploy.mjs
+```
+
+It calls HMAC-authenticated `POST /api/internal/weekly-summaries` to run the same idempotent automation,
+then polls the read-only `GET` endpoint for recorded SMTP acceptance, failing the deployment verification
+if reports remain unsent after five minutes. This verifies provider acceptance, not inbox placement.
+No new credentials are required. The existing worker must have its Gmail credentials configured.
+
+The event model is specified by these slices (following [Adam Dymitruk's Event Modeling](https://eventmodeling.org/posts/what-is-event-modeling/)
+and the [automation/todo pattern](https://eventmodeling.org/posts/event-modeling-cheatsheet/)):
+
+| Trigger / view | Command | Events / resulting view |
+| --- | --- | --- |
+| Successful signup | RecordUserRegistration | UserRegistered + onboarding EmailNotificationRequested + WeeklySummaryScheduleStarted → email tasks / weekly schedule |
+| Existing accounts at rollout | StartWeeklySummaries | WeeklySummaryScheduleStarted → immediate due row (once) |
+| Domain registration, checks, pause/resume events | Projection only | Reporting domains and observations → uptime report view |
+| Weekly schedule due row → timer robot | PrepareWeeklySummary | WeeklySummaryPrepared + EmailNotificationRequested → next due time / pending email |
+| Pending email → delivery robot | ClaimEmailNotification | EmailNotificationClaimed → leased delivery task |
+| SMTP response | RecordEmailNotificationSent / Failed | Sent / Failed → completed task or retry due time |
+
+Executable given/when/then examples live in `nextjs_statusnest/tests/weekly-summary.test.ts`:
+registration retries; outage grouping; boundary carry-in; unknown/paused time; user isolation; historical
+backfill; overdue scheduling; competing stale commands; rollout repetition; and rebuild after delivery.
+
+### Manual walkthrough
 
 1. Navigate to http://localhost:3000
 2. Click "Get Started" to create an account

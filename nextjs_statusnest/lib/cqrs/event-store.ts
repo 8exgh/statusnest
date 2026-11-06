@@ -9,8 +9,8 @@ export function assert(condition: any, message: string): asserts condition {
 }
 
 export class EventStore {
-  /** Serialize decisions and appends so competing workers cannot claim the same email. */
-  updateAggregate(userId: string, aggregateId: string, decide: (history: Event[]) => Event[]): void {
+  /** Serialize aggregate decisions and atomic outbox events in the user's store. */
+  updateAggregate(userId: string, aggregateId: string, decide: (history: Event[]) => Event[], withOutbox = false): void {
     const db = getUserWriteDatabase(userId);
     try {
       db.transaction(() => {
@@ -31,7 +31,8 @@ export class EventStore {
           (aggregate_id, aggregate_type, event_type, event_version, event_data, metadata, created_at, sequence_number)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
         events.forEach((event, index) => {
-          assert(event.aggregateId === aggregateId, 'Event must belong to the aggregate');
+          assert(event.aggregateId, 'Event aggregate ID is required');
+          assert(withOutbox || event.aggregateId === aggregateId, 'Event must belong to the aggregate');
           insert.run(event.aggregateId, event.aggregateType, event.eventType, event.eventVersion,
             JSON.stringify(event.eventData), event.metadata ? JSON.stringify(event.metadata) : null,
             event.createdAt.toISOString(), sequence + index + 1);
@@ -89,7 +90,8 @@ export class EventStore {
   async getEvents(
     userId: string, 
     fromSequence: number = 0,
-    aggregateId?: string
+    aggregateId?: string,
+    limit?: number
   ): Promise<Event[]> {
     const db = getUserWriteDatabase(userId);
     
@@ -102,6 +104,10 @@ export class EventStore {
     }
     
     query += ' ORDER BY sequence_number ASC';
+    if (limit !== undefined) {
+      query += ' LIMIT ?';
+      params.push(limit);
+    }
     
     const stmt = db.prepare(query);
     const rows = stmt.all(...params) as any[];

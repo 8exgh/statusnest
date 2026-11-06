@@ -4,6 +4,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { asCheckTier, scheduleNextPublicCheck } from '@/lib/public-monitors/schedule';
 import { decideEmailCommand, EMAIL_COMMANDS, requestEmail } from '@/lib/email/notifications';
 import { getSystemDatabase } from '@/lib/infrastructure/database/connection';
+import { onboardingEmail } from '@/lib/email/customer-emails';
+import { decideSummaryCommand, startSummarySchedule, SUMMARY_COMMANDS, summaryAggregate } from '@/lib/email/weekly-summary';
+import { queryUptimeReport } from '@/lib/email/reporting-projection';
+import { WEEK_MS } from '@/lib/email/uptime-report';
 
 export class CommandBus {
   private eventStore: EventStore;
@@ -15,6 +19,22 @@ export class CommandBus {
   async dispatch(command: Command): Promise<void> {
     assert(command.userId, "User ID is required");
     assert(command.type, "Command type is required");
+    if (command.type === 'RecordUserRegistration') {
+      this.eventStore.updateAggregate(command.userId, command.userId, history =>
+        history.some(event => event.eventType === 'UserRegisteredEvent') ? [] : this.handleRecordUserRegistration(command), true);
+      return;
+    }
+    if (SUMMARY_COMMANDS.has(command.type)) {
+      const now = new Date();
+      const due = Date.parse(command.payload.dueAt);
+      // Preserve the weekly anchor. After downtime, issue only the latest due report.
+      const end = due + Math.max(0, Math.floor((now.getTime() - due) / WEEK_MS)) * WEEK_MS;
+      const report = command.type === 'PrepareWeeklySummary'
+        ? queryUptimeReport(command.userId, new Date(end - WEEK_MS).toISOString(), new Date(end).toISOString()) : undefined;
+      this.eventStore.updateAggregate(command.userId, summaryAggregate(command.userId), history =>
+        decideSummaryCommand(command, history, now, report), true);
+      return;
+    }
     if (EMAIL_COMMANDS.has(command.type)) {
       assert(command.aggregateId, 'Notification ID is required');
       this.eventStore.updateAggregate(command.userId, command.aggregateId, history => decideEmailCommand(command, history));
@@ -75,7 +95,8 @@ export class CommandBus {
       eventData: { userId: command.userId, email, timestamp: now },
       createdAt: now,
       sequenceNumber: 0
-    }, requestEmail(command.userId, email, now)];
+    }, requestEmail(command.userId, email, now), onboardingEmail(command.userId, email, now),
+      startSummarySchedule(command.userId, email, now, false)];
   }
 
   private handleRegisterDomain(command: Command): Event[] {
