@@ -10,22 +10,25 @@ export function assert(condition: any, message: string): asserts condition {
 
 export class EventStore {
   /** Serialize aggregate decisions and atomic outbox events in the user's store. */
-  updateAggregate(userId: string, aggregateId: string, decide: (history: Event[]) => Event[], withOutbox = false): void {
+  updateAggregate(userId: string, aggregateId: string,
+    decide: (history: Event[], readAggregate: (id: string) => Event[]) => Event[], withOutbox = false): void {
     const db = getUserWriteDatabase(userId);
     try {
       db.transaction(() => {
-        const rows = db.prepare('SELECT * FROM events WHERE aggregate_id = ? ORDER BY sequence_number').all(aggregateId) as any[];
-        const history: Event[] = rows.map(row => ({
-          id: row.id,
-          aggregateId: row.aggregate_id,
-          aggregateType: row.aggregate_type,
-          eventType: row.event_type,
-          eventVersion: row.event_version,
-          eventData: JSON.parse(row.event_data),
-          createdAt: new Date(row.created_at),
-          sequenceNumber: row.sequence_number
-        }));
-        const events = decide(history);
+        const readAggregate = (id: string): Event[] => {
+          const rows = db.prepare('SELECT * FROM events WHERE aggregate_id = ? ORDER BY sequence_number').all(id) as any[];
+          return rows.map(row => ({
+            id: row.id,
+            aggregateId: row.aggregate_id,
+            aggregateType: row.aggregate_type,
+            eventType: row.event_type,
+            eventVersion: row.event_version,
+            eventData: JSON.parse(row.event_data),
+            createdAt: new Date(row.created_at),
+            sequenceNumber: row.sequence_number
+          }));
+        };
+        const events = decide(readAggregate(aggregateId), readAggregate);
         const { sequence } = db.prepare('SELECT COALESCE(MAX(sequence_number), 0) AS sequence FROM events').get() as { sequence: number };
         const insert = db.prepare(`INSERT INTO events
           (aggregate_id, aggregate_type, event_type, event_version, event_data, metadata, created_at, sequence_number)

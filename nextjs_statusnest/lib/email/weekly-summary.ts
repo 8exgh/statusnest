@@ -2,6 +2,7 @@ import type { Command, Event } from '@/types';
 import { absoluteUrl } from '@/lib/site-url';
 import { customerEmail, emailId } from './customer-emails';
 import { WEEK_MS, renderUptimeReport, type UptimeReport } from './uptime-report';
+import { unsubscribeLinks, weeklySummariesEnabled } from './weekly-preferences';
 
 export const summaryAggregate = (userId: string) => `weekly-summary-${userId}`;
 export const SUMMARY_COMMANDS = new Set(['StartWeeklySummaries', 'PrepareWeeklySummary']);
@@ -23,7 +24,8 @@ export function decideSummaryCommand(command: Command, history: Event[], now: Da
     return [startSummarySchedule(command.userId, command.payload.email, now, true)];
   }
   if (!started) throw new Error('Weekly summaries have not been started');
-  const previous = [...history].reverse().find(e => e.eventType === 'WeeklySummaryPreparedEvent');
+  if (!weeklySummariesEnabled(history)) return [];
+  const previous = [...history].reverse().find(e => e.eventData.nextDueAt);
   const dueAt = previous?.eventData.nextDueAt ?? started.eventData.nextDueAt;
   // An old view or a repeated timer tick must never request the same report twice.
   if (command.payload.dueAt !== dueAt || Date.parse(dueAt) > now.getTime()) return [];
@@ -32,12 +34,15 @@ export function decideSummaryCommand(command: Command, history: Event[], now: Da
     || Date.parse(report.periodEnd) - Date.parse(report.periodStart) !== WEEK_MS) throw new Error('Invalid weekly report window');
   const notificationId = emailId(`weekly-summary:${command.userId}:${dueAt}`);
   const nextDueAt = new Date(Date.parse(dueAt) + (Math.floor((now.getTime() - Date.parse(dueAt)) / WEEK_MS) + 1) * WEEK_MS).toISOString();
+  const links = unsubscribeLinks(command.userId);
+  const email = customerEmail(command.userId, started.eventData.email, 'weekly-summary', `weekly-summary:${command.userId}:${dueAt}`,
+    `StatusNest weekly report — ${report.periodEnd.slice(0, 10)}`,
+    `${renderUptimeReport(report, absoluteUrl('/dashboard'))}\n\nUnsubscribe from weekly reports (no sign-in needed): ${links.page}\nManage weekly emails: ${absoluteUrl('/profile')}`, now);
+  email.eventData.unsubscribeUrl = links.api;
   return [{
     aggregateId: summaryAggregate(command.userId), aggregateType: 'WeeklySummary',
     eventType: 'WeeklySummaryPreparedEvent', eventVersion: 1,
     eventData: { userId: command.userId, dueAt, nextDueAt, notificationId, report, timestamp: now.toISOString() },
     createdAt: now, sequenceNumber: 0
-  }, customerEmail(command.userId, started.eventData.email, 'weekly-summary', `weekly-summary:${command.userId}:${dueAt}`,
-    `StatusNest weekly report — ${report.periodEnd.slice(0, 10)}`,
-    renderUptimeReport(report, absoluteUrl('/dashboard')), now)];
+  }, email];
 }

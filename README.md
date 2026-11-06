@@ -155,6 +155,22 @@ Restarts and later deploys preserve this schedule. After prolonged downtime, onl
 prepared, avoiding a backlog of obsolete emails. Reports go to the account email; the separate alert email
 continues to apply to outage alerts.
 
+**Weekly email controls:** Profile has a **Weekly status emails** switch. Changes append
+`WeeklySummaryPreferenceChangedEvent`; the due view excludes disabled accounts, and the preparation
+command also checks the event stream so a stale view cannot bypass the preference. Re-enabling starts
+a fresh seven-day cycle. Pending weekly emails created before an opt-out are permanently cancelled
+when a worker next tries to claim them, even if reports have since been re-enabled. Claims check the
+preference under the same write transaction and record `EmailNotificationCancelledEvent`. Messages
+already claimed and in flight may finish delivery. Welcome emails and immediate outage alerts are unaffected.
+
+Weekly emails include a signed, purpose-specific unsubscribe link. Opening it submits the unsubscribe
+without login or a second click; ordinary HTTP GET previews are read-only. They also carry
+`List-Unsubscribe` and `List-Unsubscribe-Post` headers for supporting mail clients, using the
+[RFC 8058 POST convention](https://www.rfc-editor.org/rfc/rfc8058). The HMAC uses the existing
+`SESSION_SECRET` (required); rotating it invalidates old links. Preferences can always be changed on
+Profile after signing in. `/api/email-preferences` requires session authentication; the public
+unsubscribe endpoint accepts only signed requests to disable weekly mail.
+
 The startup automation runs immediately and every minute. It reads the `weekly_summary_schedule` todo
 view and issues `PrepareWeeklySummary`. This command checks the authoritative schedule stream under a
 write transaction and atomically appends `WeeklySummaryPreparedEvent` (the full report snapshot, source
@@ -194,10 +210,13 @@ and the [automation/todo pattern](https://eventmodeling.org/posts/event-modeling
 | Weekly schedule due row → timer robot | PrepareWeeklySummary | WeeklySummaryPrepared + EmailNotificationRequested → next due time / pending email |
 | Pending email → delivery robot | ClaimEmailNotification | EmailNotificationClaimed → leased delivery task |
 | SMTP response | RecordEmailNotificationSent / Failed | Sent / Failed → completed task or retry due time |
+| Profile switch / signed unsubscribe link | SetWeeklySummaryPreference | WeeklySummaryPreferenceChanged → enabled/disabled schedule |
+| Pending weekly email after opt-out → delivery robot | ClaimEmailNotification | EmailNotificationCancelled → terminal task excluded from delivery |
 
 Executable given/when/then examples live in `nextjs_statusnest/tests/weekly-summary.test.ts`:
 registration retries; outage grouping; boundary carry-in; unknown/paused time; user isolation; historical
-backfill; overdue scheduling; competing stale commands; rollout repetition; and rebuild after delivery.
+backfill; overdue scheduling; competing stale commands; rollout repetition; rebuild after delivery;
+unsubscribe signatures; preference replay; account isolation; and cancellation after opt-out/re-enable.
 
 ### Manual walkthrough
 

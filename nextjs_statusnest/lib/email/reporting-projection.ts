@@ -24,6 +24,8 @@ export function ensureReportingSchema(db: Database.Database): void {
       period_end TEXT NOT NULL, snapshot TEXT NOT NULL
     );
   `);
+  const columns = db.prepare('PRAGMA table_info(weekly_summary_schedule)').all() as { name: string }[];
+  if (!columns.some(c => c.name === 'enabled')) db.exec('ALTER TABLE weekly_summary_schedule ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1');
 }
 
 export function projectReportingEvent(db: Database.Database, event: Event, userId: string): void {
@@ -32,6 +34,9 @@ export function projectReportingEvent(db: Database.Database, event: Event, userI
   if (event.eventType === 'WeeklySummaryScheduleStartedEvent') {
     db.prepare('INSERT OR IGNORE INTO weekly_summary_schedule (user_id, email, next_due_at) VALUES (?, ?, ?)')
       .run(userId, data.email, data.nextDueAt);
+  } else if (event.eventType === 'WeeklySummaryPreferenceChangedEvent') {
+    db.prepare('UPDATE weekly_summary_schedule SET enabled = ?, next_due_at = COALESCE(?, next_due_at) WHERE user_id = ?')
+      .run(data.enabled ? 1 : 0, data.nextDueAt ?? null, userId);
   } else if (event.eventType === 'WeeklySummaryPreparedEvent') {
     db.prepare('UPDATE weekly_summary_schedule SET next_due_at = ? WHERE user_id = ?').run(data.nextDueAt, userId);
     db.prepare('INSERT OR IGNORE INTO weekly_summary_reports VALUES (?, ?, ?, ?, ?)')
@@ -78,7 +83,7 @@ export function getDueSummaries(now: Date): SummaryDue[] {
   try {
     ensureReportingSchema(db);
     return db.prepare(`SELECT user_id AS userId, email, next_due_at AS nextDueAt
-      FROM weekly_summary_schedule WHERE next_due_at <= ? ORDER BY next_due_at, user_id`)
+      FROM weekly_summary_schedule WHERE enabled = 1 AND next_due_at <= ? ORDER BY next_due_at, user_id`)
       .all(now.toISOString()) as SummaryDue[];
   } finally { db.close(); }
 }
@@ -113,8 +118,18 @@ export function getSummaryDeliveryStatus() {
     ensureReportingSchema(db);
     return db.prepare(`SELECT r.notification_id AS notificationId, r.user_id AS userId,
       r.period_start AS periodStart, r.period_end AS periodEnd,
-      COALESCE(e.status, 'awaiting projection') AS status, e.sent_at AS sentAt, e.last_error AS lastError
+      CASE WHEN e.cancelled_at IS NOT NULL THEN 'cancelled' ELSE COALESCE(e.status, 'awaiting projection') END AS status,
+      e.sent_at AS sentAt, e.last_error AS lastError
       FROM weekly_summary_reports r LEFT JOIN email_notifications e ON e.id = r.notification_id
       ORDER BY r.period_end DESC, r.user_id`).all();
+  } finally { db.close(); }
+}
+
+export function getWeeklySummaryPreference(userId: string): { enabled: boolean; nextDueAt: string | null } {
+  const db = getReadModelDatabase();
+  try {
+    ensureReportingSchema(db);
+    const row = db.prepare('SELECT enabled, next_due_at FROM weekly_summary_schedule WHERE user_id = ?').get(userId) as { enabled: number; next_due_at: string } | undefined;
+    return { enabled: row ? Boolean(row.enabled) : true, nextDueAt: row?.enabled ? row.next_due_at : null };
   } finally { db.close(); }
 }

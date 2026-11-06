@@ -147,6 +147,9 @@ export function getReadModelDatabase(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_email_notifications_due ON email_notifications(status, next_attempt_at, lease_until);
   `);
 
+  ensureColumn(db, 'email_notifications', 'unsubscribe_url', 'TEXT');
+  ensureColumn(db, 'email_notifications', 'cancelled_at', 'TEXT');
+
   // Migrations for read models created before offline alerts existed.
   ensureColumn(db, 'domain_monitors', 'last_alert_at', 'TIMESTAMP');
   ensureColumn(db, 'domain_monitors', 'last_alert_channels', 'JSON');

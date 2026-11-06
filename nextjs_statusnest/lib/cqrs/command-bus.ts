@@ -2,12 +2,13 @@ import { Command, Event, PublicPageCheckResult } from '@/types';
 import { EventStore, assert } from './event-store';
 import { v4 as uuidv4 } from 'uuid';
 import { asCheckTier, scheduleNextPublicCheck } from '@/lib/public-monitors/schedule';
-import { decideEmailCommand, EMAIL_COMMANDS, requestEmail } from '@/lib/email/notifications';
+import { decideEmailCommand, EMAIL_COMMANDS, EmailTaskConflict, requestEmail } from '@/lib/email/notifications';
 import { getSystemDatabase } from '@/lib/infrastructure/database/connection';
 import { onboardingEmail } from '@/lib/email/customer-emails';
 import { decideSummaryCommand, startSummarySchedule, SUMMARY_COMMANDS, summaryAggregate } from '@/lib/email/weekly-summary';
 import { queryUptimeReport } from '@/lib/email/reporting-projection';
 import { WEEK_MS } from '@/lib/email/uptime-report';
+import { decideWeeklyPreference, suppressWeeklyEmail } from '@/lib/email/weekly-preferences';
 
 export class CommandBus {
   private eventStore: EventStore;
@@ -19,6 +20,11 @@ export class CommandBus {
   async dispatch(command: Command): Promise<void> {
     assert(command.userId, "User ID is required");
     assert(command.type, "Command type is required");
+    if (command.type === 'SetWeeklySummaryPreference') {
+      this.eventStore.updateAggregate(command.userId, summaryAggregate(command.userId), history =>
+        decideWeeklyPreference({ ...command, aggregateId: summaryAggregate(command.userId) }, history, new Date()));
+      return;
+    }
     if (command.type === 'RecordUserRegistration') {
       this.eventStore.updateAggregate(command.userId, command.userId, history =>
         history.some(event => event.eventType === 'UserRegisteredEvent') ? [] : this.handleRecordUserRegistration(command), true);
@@ -37,7 +43,22 @@ export class CommandBus {
     }
     if (EMAIL_COMMANDS.has(command.type)) {
       assert(command.aggregateId, 'Notification ID is required');
-      this.eventStore.updateAggregate(command.userId, command.aggregateId, history => decideEmailCommand(command, history));
+      let cancelled = false;
+      this.eventStore.updateAggregate(command.userId, command.aggregateId, (history, readAggregate) => {
+        const events = decideEmailCommand(command, history);
+        const requested = history.find(event => event.eventType === 'EmailNotificationRequestedEvent')!;
+        if (command.type === 'ClaimEmailNotification' && requested.eventData.kind === 'weekly-summary'
+          && suppressWeeklyEmail(requested, readAggregate(summaryAggregate(command.userId)))) {
+          cancelled = true;
+          const now = new Date();
+          return [{ aggregateId: command.aggregateId!, aggregateType: 'EmailNotification',
+            eventType: 'EmailNotificationCancelledEvent', eventVersion: 1,
+            eventData: { notificationId: command.aggregateId, reason: 'weekly-summary-disabled', timestamp: now.toISOString() },
+            createdAt: now, sequenceNumber: 0 }];
+        }
+        return events;
+      });
+      if (cancelled) throw new EmailTaskConflict('Email cancelled by weekly summary preference');
       return;
     }
     

@@ -30,6 +30,10 @@ export function createEmailSender(env = process.env): EmailSender | null {
           to: task.to,
           subject: task.subject,
           text: task.text,
+          ...(task.unsubscribeUrl ? { headers: {
+            'List-Unsubscribe': `<${task.unsubscribeUrl}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+          } } : {}),
           messageId: `<${task.notificationId}@notifications.statusnest.com>`
         });
         if (!info.accepted.some(address => String(address).toLowerCase() === task.to.toLowerCase())) {

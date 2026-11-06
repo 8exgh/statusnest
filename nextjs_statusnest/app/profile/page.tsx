@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import WeeklyEmailPreference from '@/components/WeeklyEmailPreference';
 
 interface Contact {
   email: string;
@@ -158,6 +159,8 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
+
+        <WeeklyEmailPreference />
 
         <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Contact details</h2>

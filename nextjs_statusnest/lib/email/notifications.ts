@@ -11,6 +11,7 @@ export interface EmailTask {
   to: string;
   subject: string;
   text: string;
+  unsubscribeUrl?: string;
 }
 
 export class EmailTaskConflict extends Error {}
@@ -56,6 +57,9 @@ export function decideEmailCommand(command: Command, history: Event[], now = new
   const requested = history.find(event => event.eventType === 'EmailNotificationRequestedEvent');
   if (!requested || requested.eventData.userId !== command.userId) {
     throw new EmailTaskConflict('Email task not found');
+  }
+  if (history.some(event => event.eventType === 'EmailNotificationCancelledEvent')) {
+    throw new EmailTaskConflict('Email cancelled by weekly summary preference');
   }
   const { attemptId } = command.payload;
   if (typeof attemptId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(attemptId)) {
@@ -118,10 +122,10 @@ export function projectEmailEvent(db: Database.Database, event: Event, userId: s
   switch (event.eventType) {
     case 'EmailNotificationRequestedEvent':
       db.prepare(`
-        INSERT INTO email_notifications (id, user_id, recipient, subject, body, status, attempts, next_attempt_at, created_at)
-        VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?)
+        INSERT INTO email_notifications (id, user_id, recipient, subject, body, status, attempts, next_attempt_at, created_at, unsubscribe_url)
+        VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?)
         ON CONFLICT(id) DO NOTHING
-      `).run(event.aggregateId, userId, data.to, data.subject, data.text, event.createdAt.toISOString(), event.createdAt.toISOString());
+      `).run(event.aggregateId, userId, data.to, data.subject, data.text, event.createdAt.toISOString(), event.createdAt.toISOString(), data.unsubscribeUrl ?? null);
       break;
     case 'EmailNotificationClaimedEvent':
       db.prepare(`UPDATE email_notifications SET status = 'processing', attempts = ?, attempt_id = ?, lease_until = ? WHERE id = ?`)
@@ -134,6 +138,10 @@ export function projectEmailEvent(db: Database.Database, event: Event, userId: s
     case 'EmailNotificationFailedEvent':
       db.prepare(`UPDATE email_notifications SET status = 'pending', next_attempt_at = ?, lease_until = NULL, last_error = ? WHERE id = ?`)
         .run(data.nextAttemptAt, data.error, event.aggregateId);
+      break;
+    case 'EmailNotificationCancelledEvent':
+      db.prepare('UPDATE email_notifications SET cancelled_at = ?, lease_until = NULL WHERE id = ?')
+        .run(data.timestamp, event.aggregateId);
       break;
   }
 }

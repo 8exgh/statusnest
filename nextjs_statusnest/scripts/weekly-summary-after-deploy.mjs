@@ -17,10 +17,10 @@ console.log(`Weekly summary automation completed; verifying ${ids.size} report d
 for (let attempt = 0; attempt < 60; attempt++) {
   const { reports } = await request('GET');
   const expected = reports.filter(report => ids.has(report.notificationId));
-  const pending = expected.filter(report => report.status !== 'sent');
+  const pending = expected.filter(report => report.status !== 'sent' && report.status !== 'cancelled');
   if (expected.length === ids.size && !pending.length) {
-    console.log(JSON.stringify({ verified: expected.map(({ notificationId, periodEnd, sentAt }) => ({ notificationId, periodEnd, sentAt })) }));
-    console.log('All weekly summary emails have recorded SMTP acceptance.');
+    console.log(JSON.stringify({ verified: expected.map(({ notificationId, periodEnd, sentAt, status }) => ({ notificationId, periodEnd, sentAt, status })) }));
+    console.log('All weekly summary emails have recorded SMTP acceptance or cancellation by preference.');
     process.exit(0);
   }
   if (attempt === 59) {

@@ -13,6 +13,7 @@ export interface EmailTask {
   to: string;
   subject: string;
   text: string;
+  unsubscribeUrl?: string;
 }
 
 export interface EmailTaskResult {

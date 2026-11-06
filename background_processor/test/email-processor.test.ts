@@ -65,7 +65,21 @@ test('Gmail uses the configured account, fixed task recipient, and stable messag
   assert.equal(messages[0].to, 'sbennett@8examples.com');
   assert.equal(messages[0].text, task.text);
   assert.equal(messages[0].messageId, messages[1].messageId);
+  assert.equal(messages[0].headers, undefined);
   assert.equal(emailFailureReason(new Error('credentials')), 'Email delivery failed: DELIVERY_FAILED');
+});
+
+test('weekly messages include both one-click unsubscribe headers', async t => {
+  let message: any;
+  t.mock.method(nodemailer, 'createTransport', () => ({
+    sendMail: async (mail: unknown) => { message = mail; return { accepted: [task.to] }; }, close() {}
+  }));
+  const sender = createEmailSender({ GMAIL_USER: 'sender@example.com', GMAIL_APP_PASSWORD: 'password' })!;
+  const unsubscribeUrl = 'https://statusnest.com/api/weekly-summary-unsubscribe?userId=test&token=signed';
+  await sender.send({ ...task, unsubscribeUrl });
+  assert.deepEqual(message.headers, {
+    'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+  });
 });
 
 test('SMTP acceptance is required before recording success', async t => {

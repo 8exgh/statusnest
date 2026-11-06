@@ -8,9 +8,9 @@ export class QueryBus {
     try {
       // Queries are read-only; the claim command checks the authoritative stream.
       return db.prepare(`
-        SELECT id AS notificationId, user_id AS userId, recipient AS "to", subject, body AS text
+        SELECT id AS notificationId, user_id AS userId, recipient AS "to", subject, body AS text, unsubscribe_url AS unsubscribeUrl
         FROM email_notifications
-        WHERE status != 'sent' AND next_attempt_at <= ? AND (lease_until IS NULL OR lease_until <= ?)
+        WHERE status != 'sent' AND cancelled_at IS NULL AND next_attempt_at <= ? AND (lease_until IS NULL OR lease_until <= ?)
         ORDER BY next_attempt_at, created_at, id LIMIT 10
       `).all(new Date().toISOString(), new Date().toISOString()) as EmailTask[];
     } finally {

@@ -96,7 +96,9 @@ When a domain transitions to `offline` (from `online` or `unknown` — never rep
 - `lib/email/summary-automation.ts`: startup + 60-second timer reads the todo view and issues commands; authoritative schedule checks make competing or repeated ticks safe. Missed weeks coalesce to the latest due report.
 - `lib/email/uptime-report.ts`: time-weighted uptime and outage episodes; checks cover at most ten minutes, pauses and gaps are excluded, no data is N/A. UTC half-open windows; public monitors excluded.
 - HMAC `/api/internal/weekly-summaries`: POST runs the robot; GET reads delivery state. Devops runs `scripts/weekly-summary-after-deploy.mjs` inside the app container after the health check and verifies SMTP acceptance via recorded delivery outcomes.
-- Existing Gmail worker handles welcome and report emails without changes. Delivery remains at least once across a crash after SMTP acceptance.
+- The Gmail worker handles welcome and report emails; weekly tasks carry unsubscribe headers. Delivery remains at least once across a crash after SMTP acceptance.
+- `weekly-preferences.ts` / `preference-service.ts`: `SetWeeklySummaryPreference` records `WeeklySummaryPreferenceChangedEvent`; the Profile switch and signed one-click unsubscribe use the same command. Re-enable schedules a fresh week. Claims check subscription history transactionally and record `EmailNotificationCancelledEvent` for queued weekly reports invalidated by any later opt-out. Already in-flight messages may finish.
+- Weekly email links use a purpose-scoped HMAC with `SESSION_SECRET`; GET probes never mutate preferences. The browser link submits automatically, and mail-client headers support the RFC 8058 POST payload. `/api/email-preferences` is session-scoped; `/api/weekly-summary-unsubscribe` accepts a signed capability only to disable weekly reports. Monitoring/alerts and welcome mail remain enabled.
 - `tests/weekly-summary.test.ts`: executable event-model specifications. See README for the slice table and report semantics.
 
 ### Security
