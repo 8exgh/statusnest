@@ -108,6 +108,23 @@ user's profile, or as an **email** when no phone number is set (AlertTray's rout
 to always include email as well, add `'email'` to `critical` in AlertTray's `routing-policy.ts`). The alert
 fires once per outage (on the transition to offline), and the dashboard shows when it was sent and on which channels.
 
+**Quiet hours:** In **Profile → Quiet hours**, enable a weekly schedule, choose a timezone, and add
+one or more time ranges with their starting weekdays. During any matching range, alerts use AlertTray's
+email-only (`medium`) routing and carry no phone recipient. Email goes to the alert email, falling back
+to the account email. Outside those ranges, normal calls/SMS resume. An alert already sent by email
+is not called or texted again when quiet hours end.
+
+Ranges include their start and exclude their end. Overnight ranges end on the following day (Monday
+22:00–07:00 includes Tuesday morning). Overlaps are combined, and local times follow the selected
+timezone's daylight saving changes, including both occurrences of a repeated hour. Equal start/end
+times are rejected. Quiet hours default to off; disabling them preserves the saved ranges.
+
+`GET`/`PUT /api/alert-preferences` are session-scoped. `SetAlertQuietHours` records an
+`AlertQuietHoursUpdatedEvent` in the user's event store; dispatch reads the latest preference directly
+so changes apply immediately without waiting for projections. Routing uses the alert dispatch time,
+not a delayed check timestamp. No database schema migration is needed. Regression coverage lives in
+`nextjs_statusnest/tests/quiet-hours.test.ts` and uses temporary databases and a mocked AlertTray client.
+
 Setup:
 1. Create an AlertTray account, generate an API key on its dashboard and put it in `nextjs_statusnest/.env.local`
    as `ALERTTRAY_API_KEY` (see `.env.example`). Point `ALERTTRAY_API_URL` at a local AlertTray for development.

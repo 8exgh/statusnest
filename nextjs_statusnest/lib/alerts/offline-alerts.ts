@@ -1,12 +1,15 @@
 import { CommandBus } from '@/lib/cqrs/command-bus';
 import { ContactDetailsService } from '@/lib/infrastructure/users/contact-details';
 import { AlertTrayClient, AlertTrayError } from './alerttray-client';
+import { isWithinQuietHours } from './quiet-hours';
+import { getQuietHours } from './quiet-hours-service';
 
 /**
  * Offline alerting: when a monitored domain transitions to `offline`, the
  * site owner is alerted through AlertTray at the highest severity, which
  * AlertTray delivers as a phone call + SMS (and email as the fallback when no
- * phone number is set). The outcome is recorded in the user's event stream
+ * phone number is set). Account quiet hours route alerts to email only.
+ * The outcome is recorded in the user's event stream
  * so the dashboard can show it.
  */
 
@@ -70,16 +73,21 @@ export function buildOfflineAlertContent(check: Pick<OfflineCheck, 'domain' | 'r
  */
 export async function alertDomainOffline(
   check: OfflineCheck,
-  client: AlertTrayClient = new AlertTrayClient()
+  client: AlertTrayClient = new AlertTrayClient(),
+  now: Date = new Date()
 ): Promise<void> {
   const commandBus = new CommandBus();
-  const recipients = ContactDetailsService.getAlertRecipients(check.userId);
   
   try {
+    // Evaluate at dispatch time, not the (possibly delayed) check timestamp.
+    const quietHoursActive = isWithinQuietHours(getQuietHours(check.userId), now);
+    const contact = ContactDetailsService.getAlertRecipients(check.userId);
+    // Medium severity selects email; also omit the phone recipient so it cannot be called/texted.
+    const recipients = quietHoursActive ? { phoneNumber: null, email: contact.email } : contact;
     if (!client.isConfigured()) {
       throw new AlertTrayError('AlertTray is not configured: ALERTTRAY_API_KEY is not set');
     }
-    if (!recipients.phoneNumber) {
+    if (!recipients.phoneNumber && !quietHoursActive) {
       console.warn(
         `⚠️  ${check.domain} is offline but user ${check.userId} has no phone number — ` +
         `AlertTray will fall back to email (${recipients.email ?? 'none'})`
@@ -91,9 +99,10 @@ export async function alertDomainOffline(
       purposeId: OFFLINE_ALERT_PURPOSE_ID,
       title,
       message,
-      severity: OFFLINE_ALERT_SEVERITY,
+      severity: quietHoursActive ? 'medium' : OFFLINE_ALERT_SEVERITY,
       metadata: {
         source: 'statusnest',
+        quietHoursActive,
         domainId: check.domainId,
         domain: check.domain,
         responseCode: check.responseCode ?? null,

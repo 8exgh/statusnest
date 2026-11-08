@@ -9,6 +9,7 @@ import { decideSummaryCommand, startSummarySchedule, SUMMARY_COMMANDS, summaryAg
 import { queryUptimeReport } from '@/lib/email/reporting-projection';
 import { WEEK_MS } from '@/lib/email/uptime-report';
 import { decideWeeklyPreference, suppressWeeklyEmail } from '@/lib/email/weekly-preferences';
+import { decideQuietHours, quietHoursAggregate } from '@/lib/alerts/quiet-hours';
 
 export class CommandBus {
   private eventStore: EventStore;
@@ -20,6 +21,11 @@ export class CommandBus {
   async dispatch(command: Command): Promise<void> {
     assert(command.userId, "User ID is required");
     assert(command.type, "Command type is required");
+    if (command.type === 'SetAlertQuietHours') {
+      this.eventStore.updateAggregate(command.userId, quietHoursAggregate(command.userId), history =>
+        decideQuietHours(command, history, new Date()));
+      return;
+    }
     if (command.type === 'SetWeeklySummaryPreference') {
       this.eventStore.updateAggregate(command.userId, summaryAggregate(command.userId), history =>
         decideWeeklyPreference({ ...command, aggregateId: summaryAggregate(command.userId) }, history, new Date()));

@@ -29,7 +29,7 @@ export default function HowItWorks() {
         <h2 id="your-websites" className="text-2xl font-bold text-gray-900">Monitoring your own websites</h2>
         <p className="mt-3">Add a domain to your dashboard and StatusNest checks it about every five minutes with an HTTP HEAD request. It tries HTTPS first, then HTTP if needed. A response below HTTP 500 counts as the server being reachable, including a sign-in or permission response such as HTTP 401 or 403.</p>
         <p className="mt-3">Connection failures and server errors are retried within a short check window before a domain is marked offline. These checks establish server reachability; they do not log in, submit forms, verify checkout flows, or prove that every feature on a site works.</p>
-        <p className="mt-3">When a domain changes to offline, StatusNest sends a critical alert through AlertTray. A phone number on your Profile enables calls and SMS; email is the fallback when no number is set. An outage alert is sent on the transition, rather than on every failed check.</p>
+        <p className="mt-3">When a domain changes to offline, StatusNest sends an alert through AlertTray. A phone number on your Profile enables calls and SMS; email is the fallback when no number is set. Set quiet hours in your Profile to receive email only during selected days and times in your timezone. Monitoring continues, and these alerts are not called or texted later. An outage alert is sent on the transition, rather than on every failed check.</p>
         <Link href="/register" className="mt-4 inline-block font-medium text-blue-600 hover:underline">Start monitoring your website →</Link>
       </section>
 

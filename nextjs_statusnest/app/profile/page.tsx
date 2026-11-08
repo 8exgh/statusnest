@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import WeeklyEmailPreference from '@/components/WeeklyEmailPreference';
+import QuietHoursPreference from '@/components/QuietHoursPreference';
 
 interface Contact {
   email: string;
@@ -146,7 +147,7 @@ export default function ProfilePage() {
           <p className="text-sm text-gray-600">
             As soon as one of your domains stops responding, StatusNest raises a highest-priority alert
             through AlertTray: you get a <strong>phone call</strong> and an <strong>SMS</strong> at the
-            number below. Without a phone number the alert is sent by <strong>email</strong> instead.
+            number below. During your quiet hours, or without a phone number, the alert is sent by <strong>email</strong> instead.
           </p>
           <p className="mt-2 text-xs text-gray-500">
             Calls and texts come from AlertTray&apos;s number, +1 587-809-5774 — save it as a contact so
@@ -248,6 +249,7 @@ export default function ProfilePage() {
             </button>
           </div>
         </form>
+        <QuietHoursPreference alertEmail={alertEmail} />
       </div>
     </div>
   );

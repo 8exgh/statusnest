@@ -78,6 +78,7 @@ docker build -t browser-checker-statusnest . && \
 - `/api/auth/*`: Authentication endpoints (register, login, logout)
 - `/api/domains/*`: Domain management (register, status, toggle)
 - `/api/contact`: Current user's phone number / alert email (`GET`, `PUT`; session auth) — edited on `/profile`
+- `/api/alert-preferences`: Current user's quiet hours (`GET`, `PUT`; session auth) — edited on `/profile`
 - `/api/internal/*`: Secured endpoints for background_processor (tasks, status-update)
 
 ### Offline Alerts (via AlertTray)
@@ -88,6 +89,7 @@ When a domain transitions to `offline` (from `online` or `unknown` — never rep
 - `lib/infrastructure/users/contact-details.ts`: phone number (E.164) and alert email stored on the `users` row in system.db; `getAlertRecipients` falls back to the account email so there is always an email channel.
 - Read model: `domain_monitors.last_alert_at / last_alert_channels / last_alert_error` (idempotent `ensureColumn` migrations) — shown on the dashboard.
 - Without `ALERTTRAY_API_KEY` the alert is logged and recorded as failed (`DomainOfflineAlertFailedEvent`), nothing is sent.
+- Quiet hours: `SetAlertQuietHours` records `AlertQuietHoursUpdatedEvent` on the per-user `alert-quiet-hours:{userId}` aggregate. `lib/alerts/quiet-hours-service.ts` reads the latest event directly so saves apply immediately. `/profile` supports multiple weekly ranges and a timezone; defaults off. `quiet-hours.ts` validates and matches local times (start inclusive, end exclusive; overnight ranges belong to their starting weekday; DST follows local wall time). At alert dispatch time, matching ranges select AlertTray's email-only `medium` severity and remove the phone recipient. The alert email/account-email fallback still applies, and no call/SMS is queued for later. `tests/quiet-hours.test.ts` covers schedule boundaries, DST, authentication/isolation, persistence and delivery routing.
 
 ### Customer email reports
 - `lib/email/customer-emails.ts`: welcome email requested atomically with a new user registration; deterministic IDs, no retrospective welcomes on replay.
